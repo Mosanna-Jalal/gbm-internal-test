@@ -128,7 +128,7 @@ function parseBuffer(buffer: Buffer, filename: string): ParsedStudent[] {
         if (!val || val === rollNumber) continue
         if (field === "rollNumber") continue
         if (["name","fatherName","mobile","category","gender","course","session"].includes(field)) {
-          (record as Record<string, string>)[field] = val
+          (record as unknown as Record<string, string>)[field] = val
         } else {
           record.extras[field] = val
         }
