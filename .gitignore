@@ -12,6 +12,12 @@
 
 # testing
 /coverage
+/playwright-report/
+/test-results/
+
+# dev notes
+prompt.txt
+rough.txt
 
 # next.js
 /.next/
