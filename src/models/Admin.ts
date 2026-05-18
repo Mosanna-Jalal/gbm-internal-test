@@ -1,4 +1,4 @@
-import { Schema, model, Document, models } from "mongoose"
+import mongoose, { Schema, model, Document, models } from "mongoose"
 
 export interface IAdmin extends Document {
   username: string
