@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
   SESSIONS, COURSES, DEPARTMENTS, VALID_COURSES_FOR_SESSION, SESSION_SEMS,
@@ -18,7 +18,7 @@ function saveContext(ctx: Record<string, string>) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(ctx)) } catch {}
 }
 
-export default function NewQuestionPage() {
+function NewQuestionPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -256,4 +256,8 @@ export default function NewQuestionPage() {
       </div>
     </div>
   )
+}
+
+export default function NewQuestionPageWrapper() {
+  return <Suspense><NewQuestionPage /></Suspense>
 }

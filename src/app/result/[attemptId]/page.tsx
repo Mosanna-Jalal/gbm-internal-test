@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { getGrade, getGradeColor, semesterLabel } from "@/lib/constants"
@@ -50,7 +50,7 @@ interface LeaderboardEntry {
   submittedAt: string
 }
 
-export default function ResultPage({ params }: { params: Promise<{ attemptId: string }> }) {
+function ResultPage({ params }: { params: Promise<{ attemptId: string }> }) {
   const searchParams = useSearchParams()
   const roll = searchParams.get("roll") ?? ""
 
@@ -379,4 +379,8 @@ export default function ResultPage({ params }: { params: Promise<{ attemptId: st
       </div>
     </>
   )
+}
+
+export default function ResultPageWrapper({ params }: { params: Promise<{ attemptId: string }> }) {
+  return <Suspense><ResultPage params={params} /></Suspense>
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { semesterLabel } from "@/lib/constants"
 
@@ -25,7 +25,7 @@ interface TestData {
 
 const OPTION_LABELS = ["A", "B", "C", "D"]
 
-export default function TestPage({ params }: { params: Promise<{ testId: string }> }) {
+function TestPage({ params }: { params: Promise<{ testId: string }> }) {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -374,4 +374,8 @@ export default function TestPage({ params }: { params: Promise<{ testId: string 
       )}
     </div>
   )
+}
+
+export default function TestPageWrapper({ params }: { params: Promise<{ testId: string }> }) {
+  return <Suspense><TestPage params={params} /></Suspense>
 }

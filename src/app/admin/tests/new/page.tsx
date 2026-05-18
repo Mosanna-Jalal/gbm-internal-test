@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
   SESSIONS, COURSES, DEPARTMENTS, VALID_COURSES_FOR_SESSION, SESSION_SEMS,
@@ -50,7 +50,7 @@ function emptyQ(): InlineQuestion {
 
 function readCtx() { try { return JSON.parse(localStorage.getItem("q_context") ?? "{}") } catch { return {} } }
 
-export default function NewTestPage() {
+function NewTestPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -610,4 +610,8 @@ export default function NewTestPage() {
       </div>
     </div>
   )
+}
+
+export default function NewTestPageWrapper() {
+  return <Suspense><NewTestPage /></Suspense>
 }
