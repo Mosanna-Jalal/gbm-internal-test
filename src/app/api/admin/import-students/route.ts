@@ -3,7 +3,10 @@ import * as XLSX from "xlsx"
 import { connectDB } from "@/lib/mongodb"
 import Student from "@/models/Student"
 import { getAdminFromCookie } from "@/lib/auth"
-import { getCourseForDepartment } from "@/lib/constants"
+import { getCourseForDepartment, DEPARTMENTS } from "@/lib/constants"
+
+// Flat list of all known department names (uppercase) for normalization
+const ALL_DEPARTMENTS = Object.values(DEPARTMENTS).flat().map((d) => d.toUpperCase())
 
 const FILE_META: { pattern: RegExp; course: string; session: string }[] = [
   { pattern: /BA/i,   course: "B.A",   session: "2025-29" },
@@ -25,11 +28,14 @@ const HEADER_MAP: Record<string, string> = {
   "exam roll": "rollNumber", "exam roll no": "rollNumber", "exam roll number": "rollNumber",
   "roll no": "rollNumber", "roll number": "rollNumber", "rollno": "rollNumber",
   "registration no": "rollNumber", "reg no": "rollNumber",
+  "university roll no": "rollNumber", "university roll number": "rollNumber", "university roll": "rollNumber",
   // Name
   "name": "name", "student name": "name", "candidate name": "name",
   // Father's name
   "father name": "fatherName", "father's name": "fatherName", "fathers name": "fatherName",
   "father": "fatherName",
+  // Mother's name — stored in extras, no dedicated field
+  "mother name": "motherName", "mother's name": "motherName", "mother": "motherName",
   // Mobile
   "mobile": "mobile", "mobile no": "mobile", "phone": "mobile",
   "contact no": "mobile", "contact": "mobile",
@@ -37,9 +43,28 @@ const HEADER_MAP: Record<string, string> = {
   "category": "category", "caste": "category", "caste category": "category",
   // Gender
   "gender": "gender", "sex": "gender",
+  // Department / subject (honours)
+  "department": "department", "dept": "department",
+  "subject": "department", "honours subject": "department",
+  "hons subject": "department", "hons": "department",
+  "honours": "department", "optional subject": "department",
+  "subsidiary": "department", "subsidiary subject": "department",
+  "paper": "department", "stream": "department",
+  "major subject": "department", "major": "department",
   // Course / session — detected from filename, but accept overrides
   "course": "course", "program": "course", "programme": "course",
   "session": "session", "batch": "session",
+}
+
+/** Normalize a raw department value to uppercase and match against known departments.
+ *  Returns the canonical name if found, otherwise returns the uppercased raw value. */
+function normaliseDepartment(raw: string): string {
+  const upper = raw.toUpperCase().trim()
+  // Exact match
+  if (ALL_DEPARTMENTS.includes(upper)) return upper
+  // Partial match (e.g. "CHEM" → "CHEMISTRY")
+  const partial = ALL_DEPARTMENTS.find((d) => d.startsWith(upper) || upper.startsWith(d))
+  return partial ?? upper
 }
 
 function normaliseHeader(h: string): string {
@@ -51,6 +76,7 @@ interface ParsedStudent {
   name: string
   course: string
   session: string
+  department: string
   fatherName: string
   mobile: string
   category: string
@@ -114,6 +140,7 @@ function parseBuffer(buffer: Buffer, filename: string): ParsedStudent[] {
       name: "",
       course: fileCourse,
       session: fileSession,
+      department: "",
       fatherName: "",
       mobile: "",
       category: "",
@@ -129,6 +156,8 @@ function parseBuffer(buffer: Buffer, filename: string): ParsedStudent[] {
         if (field === "rollNumber") continue
         if (["name","fatherName","mobile","category","gender","course","session"].includes(field)) {
           (record as unknown as Record<string, string>)[field] = val
+        } else if (field === "department") {
+          record.department = normaliseDepartment(val)
         } else {
           record.extras[field] = val
         }
@@ -164,6 +193,7 @@ export async function POST(req: NextRequest) {
 
   let imported = 0
   let updated = 0
+  let departmentFilled = 0
   const errors: string[] = []
 
   for (const file of files) {
@@ -173,16 +203,24 @@ export async function POST(req: NextRequest) {
 
       for (const s of students) {
         try {
-          const existing = await Student.findOne({ rollNumber: s.rollNumber })
+          const existing = await Student.findOne({ rollNumber: s.rollNumber }).lean()
+          if (existing) {
+            // Track when an existing student gains a department value they didn't have
+            if (s.department && !existing.department) departmentFilled++
+            updated++
+          } else {
+            imported++
+          }
           // $set updates all fields BUT never touches StudentAttempt — those are in a
           // separate collection linked only by rollNumber, so they're always preserved.
-          const result = await Student.updateOne(
+          // Only overwrite department if the incoming value is non-empty
+          const setPayload: Record<string, unknown> = { ...s }
+          if (!s.department) delete setPayload.department
+          await Student.updateOne(
             { rollNumber: s.rollNumber },
-            { $set: s },
+            { $set: setPayload },
             { upsert: true }
           )
-          if (existing) updated++
-          else imported++
         } catch {
           // duplicate key or other — skip silently
         }
@@ -192,7 +230,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ success: true, imported, updated, errors })
+  return NextResponse.json({ success: true, imported, updated, departmentFilled, errors })
 }
 
 // GET — return count + list of students (with optional course/session filter)

@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect, useRef, useState } from "react"
+import { createPortal, flushSync } from "react-dom"
 import { useRouter } from "next/navigation"
 import {
   SESSIONS, COURSES, DEPARTMENTS, VALID_COURSES_FOR_SESSION, SESSION_SEMS,
@@ -29,10 +30,16 @@ interface Student {
   name: string
   course: string
   session: string
+  department?: string
   fatherName?: string
   mobile?: string
   category?: string
   gender?: string
+}
+
+interface ImportToast {
+  type: "success" | "error" | "info"
+  lines: string[]
 }
 
 interface AdminInfo {
@@ -41,8 +48,10 @@ interface AdminInfo {
 }
 
 export default function StudentsPage() {
-  const router  = useRouter()
-  const fileRef = useRef<HTMLInputElement>(null)
+  const router        = useRouter()
+  const fileRef       = useRef<HTMLInputElement>(null)
+  const uploadBtnRef  = useRef<HTMLLabelElement>(null)
+  const uploadTextRef = useRef<HTMLSpanElement>(null)
 
   const [adminInfo, setAdminInfo]         = useState<AdminInfo | null>(null)
   const [lockedCourse, setLockedCourse]   = useState<Course | "">("")
@@ -63,9 +72,18 @@ export default function StudentsPage() {
   const [pages, setPages] = useState(1)
   const [loading, setLoading] = useState(false)
 
-  const [importing,    setImporting]    = useState(false)
-  const [importMsg,    setImportMsg]    = useState("")
-  const [importError,  setImportError]  = useState("")
+  const [importing,      setImporting]      = useState(false)
+  const [uploadingName,  setUploadingName]  = useState("")
+  const [uploadDone,     setUploadDone]     = useState(false)
+  const [toast,          setToast]          = useState<ImportToast | null>(null)
+  const toastTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const doneTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function showToast(t: ImportToast) {
+    setToast(t)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), 8000)
+  }
 
   const availableCourses = filterSession
     ? VALID_COURSES_FOR_SESSION[filterSession as Session]
@@ -143,23 +161,71 @@ export default function StudentsPage() {
     fetchStudents(1, lockedCourse || "", "")
   }
 
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
     if (!files?.length) return
-    setImporting(true); setImportMsg(""); setImportError("")
+    // Direct DOM update — instant, no React cycle needed
+    if (uploadBtnRef.current) {
+      uploadBtnRef.current.style.opacity = "0.65"
+      uploadBtnRef.current.style.pointerEvents = "none"
+      uploadBtnRef.current.style.cursor = "default"
+      uploadBtnRef.current.setAttribute("aria-disabled", "true")
+      uploadBtnRef.current.setAttribute("data-uploading", "true")
+    }
+    if (uploadTextRef.current) {
+      uploadTextRef.current.textContent = "Uploading..."
+    }
+    // flushSync keeps React state in sync with the DOM update above
+    flushSync(() => {
+      setImporting(true)
+      setUploadDone(false)
+      setUploadingName(files.length === 1 ? files[0].name : `${files.length} files`)
+    })
+    requestAnimationFrame(() => doUpload(Array.from(files)))
+  }
+
+  async function doUpload(files: File[]) {
     const form = new FormData()
-    for (const file of Array.from(files)) form.append("files", file)
+    for (const file of files) form.append("files", file)
     try {
       const res  = await fetch("/api/admin/import-students", { method: "POST", body: form })
       const data = await res.json()
-      if (!res.ok) { setImportError(data.error ?? "Import failed"); return }
-      setImportMsg(`✓ Imported ${data.imported} new, updated ${data.updated ?? 0} existing.${data.errors?.length ? ` ${data.errors.length} file(s) had errors.` : ""}`)
+      if (!res.ok) {
+        showToast({ type: "error", lines: [data.error ?? "Import failed"] })
+        return
+      }
+      const lines: string[] = []
+      if (data.imported > 0)
+        lines.push(`${data.imported} new student${data.imported !== 1 ? "s" : ""} added`)
+      if (data.updated > 0)
+        lines.push(`${data.updated} existing student${data.updated !== 1 ? "s" : ""} updated`)
+      if (data.departmentFilled > 0)
+        lines.push(`Department filled for ${data.departmentFilled} student${data.departmentFilled !== 1 ? "s" : ""}`)
+      if (data.errors?.length)
+        lines.push(`${data.errors.length} file${data.errors.length !== 1 ? "s" : ""} had errors`)
+      if (lines.length === 0) {
+        showToast({ type: "info", lines: ["All records are already up to date.", "No new data was found in the file."] })
+      } else {
+        showToast({ type: "success", lines })
+      }
+      setUploadDone(true)
+      if (doneTimer.current) clearTimeout(doneTimer.current)
+      doneTimer.current = setTimeout(() => setUploadDone(false), 4000)
       fetchStudents(1, filterCourse, filterSession)
       fetch("/api/admin/import-students").then((r) => r.json()).then((d) => setAllCount(d.count ?? 0))
     } catch {
-      setImportError("Upload failed. Please try again.")
+      showToast({ type: "error", lines: ["Upload failed. Please try again."] })
     } finally {
+      // Reset any direct DOM styles applied in handleUpload
+      if (uploadBtnRef.current) {
+        uploadBtnRef.current.style.opacity = ""
+        uploadBtnRef.current.style.pointerEvents = ""
+        uploadBtnRef.current.style.cursor = ""
+        uploadBtnRef.current.removeAttribute("aria-disabled")
+        uploadBtnRef.current.removeAttribute("data-uploading")
+      }
       setImporting(false)
+      setUploadingName("")
       if (fileRef.current) fileRef.current.value = ""
     }
   }
@@ -168,7 +234,7 @@ export default function StudentsPage() {
     if (!confirm(`Delete all ${allCount} students from the database?`)) return
     await fetch("/api/admin/import-students", { method: "DELETE" })
     setStudents([]); setTotalCount(0); setAllCount(0)
-    setImportMsg("All students cleared.")
+    showToast({ type: "success", lines: ["All students cleared from the database."] })
   }
 
   function handleCreateTest() {
@@ -190,6 +256,54 @@ export default function StudentsPage() {
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto">
+
+      {/* Toast — portal-rendered so it's never clipped by parent overflow/transforms */}
+      {toast && typeof document !== "undefined" && createPortal(
+        <div className={`toast-enter fixed top-4 left-4 right-4 sm:left-auto sm:right-5 sm:top-5 z-[9999] sm:w-80
+          rounded-2xl shadow-2xl overflow-hidden`}
+        >
+          {/* Coloured top bar */}
+          <div className={`h-1 w-full ${
+            toast.type === "success" ? "bg-emerald-500" :
+            toast.type === "info"    ? "bg-blue-400" :
+                                       "bg-red-500"
+          }`} />
+          <div className="bg-white px-4 py-3.5 flex items-start gap-3">
+            <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-base mt-0.5 ${
+              toast.type === "success" ? "bg-emerald-100 text-emerald-600" :
+              toast.type === "info"    ? "bg-blue-100 text-blue-600" :
+                                         "bg-red-100 text-red-600"
+            }`}>
+              {toast.type === "success" ? "✓" : toast.type === "info" ? "ℹ" : "✕"}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm font-bold ${
+                toast.type === "success" ? "text-emerald-800" :
+                toast.type === "info"    ? "text-blue-800" :
+                                           "text-red-800"
+              }`}>
+                {toast.type === "success" ? "Import Complete" :
+                 toast.type === "info"    ? "No Changes" :
+                                            "Import Failed"}
+              </p>
+              <ul className="mt-1.5 space-y-1">
+                {toast.lines.map((line, i) => (
+                  <li key={i} className="text-xs text-gray-500 flex items-start gap-1.5">
+                    <span className="shrink-0 mt-px">·</span>
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <button
+              onClick={() => setToast(null)}
+              className="shrink-0 text-gray-300 hover:text-gray-500 text-xl leading-none mt-0.5"
+            >×</button>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <div>
@@ -203,10 +317,27 @@ export default function StudentsPage() {
                 Clear All
               </button>
             )}
-            <label className={`cursor-pointer bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors ${importing ? "opacity-60 pointer-events-none" : ""}`}>
-              {importing ? "Importing..." : "↑ Upload Excel"}
-              <input ref={fileRef} type="file" accept=".xlsx,.xls" multiple className="hidden" onChange={handleUpload} disabled={importing} />
-            </label>
+            <div className="flex flex-col items-end gap-1">
+              <label
+                ref={uploadBtnRef}
+                aria-disabled={importing || uploadDone}
+                className={`cursor-pointer bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2
+                  ${importing || uploadDone ? "opacity-70 pointer-events-none cursor-default" : ""}`}
+              >
+                {importing ? (
+                  <>
+                    <svg className="w-3.5 h-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 12a8 8 0 018-8m0 0a8 8 0 018 8" />
+                    </svg>
+                    <span ref={uploadTextRef}>Uploading...</span>
+                  </>
+                ) : uploadDone ? <span ref={uploadTextRef}>✓ Uploaded!</span> : <span ref={uploadTextRef}>↑ Upload Excel</span>}
+                <input ref={fileRef} type="file" accept=".xlsx,.xls" multiple className="hidden" onChange={handleUpload} disabled={importing} />
+              </label>
+              {importing && uploadingName && (
+                <p className="text-xs text-gray-400 truncate max-w-[200px]">{uploadingName}</p>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -214,11 +345,9 @@ export default function StudentsPage() {
       {isMaster && (
         <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-700 mb-4">
           File name must contain <strong>BA</strong>, <strong>BCOM</strong>, <strong>BSC</strong>, or <strong>BLIS</strong> for auto-detection.
+          Department/subject columns (e.g. &quot;Honours Subject&quot;) are auto-imported.
         </div>
       )}
-
-      {importMsg   && <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl text-sm mb-4">{importMsg}</div>}
-      {importError && <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm mb-4">{importError}</div>}
 
       {/* Filter Panel */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 mb-4 space-y-4">
@@ -369,12 +498,14 @@ export default function StudentsPage() {
         <>
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[480px]">
+              <table className="w-full text-sm min-w-[700px]">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="text-left px-4 py-3 font-medium text-gray-600">#</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-600">Roll</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-600">Name</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600 hidden sm:table-cell">Father&apos;s Name</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600 hidden md:table-cell">Dept</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-600 hidden sm:table-cell">Course</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-600 hidden sm:table-cell">Session</th>
                     <th className="px-4 py-3 w-8"></th>
@@ -392,6 +523,13 @@ export default function StudentsPage() {
                           <td className="px-4 py-2.5 text-gray-400">{(page - 1) * 50 + i + 1}</td>
                           <td className="px-4 py-2.5 font-mono text-gray-700 text-xs">{s.rollNumber}</td>
                           <td className="px-4 py-2.5 font-medium text-gray-900">{s.name}</td>
+                          <td className="px-4 py-2.5 text-gray-600 hidden sm:table-cell">{s.fatherName || <span className="text-gray-300">—</span>}</td>
+                          <td className="px-4 py-2.5 hidden md:table-cell">
+                            {s.department
+                              ? <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs font-medium">{s.department}</span>
+                              : <span className="text-gray-300">—</span>
+                            }
+                          </td>
                           <td className="px-4 py-2.5 text-gray-600 hidden sm:table-cell">{s.course}</td>
                           <td className="px-4 py-2.5 text-gray-600 hidden sm:table-cell">{s.session}</td>
                           <td className="px-4 py-2.5 text-gray-400 text-right select-none">
@@ -400,10 +538,16 @@ export default function StudentsPage() {
                         </tr>
                         {isExpanded && (
                           <tr key={`${s._id}-detail`}>
-                            <td colSpan={6} className="bg-blue-50/60 px-4 py-4 border-t border-blue-100">
+                            <td colSpan={8} className="bg-blue-50/60 px-4 py-4 border-t border-blue-100">
                               <div className="flex flex-wrap gap-x-6 gap-y-1 mb-3 text-xs text-gray-600">
                                 <span><span className="text-gray-400">Roll:</span> <span className="font-mono text-gray-800">{s.rollNumber}</span></span>
                                 <span><span className="text-gray-400">Course:</span> {s.course} · {s.session}</span>
+                                {s.department && (
+                                  <span className="inline-flex items-center gap-1">
+                                    <span className="text-gray-400">Dept:</span>
+                                    <span className="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded text-[11px] font-medium">{s.department}</span>
+                                  </span>
+                                )}
                                 {s.fatherName && <span><span className="text-gray-400">Father:</span> {s.fatherName}</span>}
                                 {s.mobile    && <span><span className="text-gray-400">Mobile:</span> {s.mobile}</span>}
                                 {s.category  && <span><span className="text-gray-400">Category:</span> {s.category}</span>}
