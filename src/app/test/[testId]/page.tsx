@@ -249,7 +249,7 @@ function TestPage({ params }: { params: Promise<{ testId: string }> }) {
       </div>
 
       {/* Questions */}
-      <main className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+      <main className="max-w-3xl mx-auto px-4 py-6 space-y-6 pb-6 md:pb-6">
         {test.questions.map((q, idx) => {
           const selected = answers[q._id]
           return (
@@ -268,7 +268,7 @@ function TestPage({ params }: { params: Promise<{ testId: string }> }) {
                 </span>
                 <p className="text-gray-900 text-sm leading-relaxed">{q.text}</p>
               </div>
-              <div className="space-y-2 ml-10">
+              <div className="space-y-2 ml-0 sm:ml-10">
                 {q.options.map((opt, optIdx) => {
                   const isSelected = selected === optIdx
                   return (
@@ -287,20 +287,41 @@ function TestPage({ params }: { params: Promise<{ testId: string }> }) {
                   )
                 })}
               </div>
-              <p className="text-xs text-gray-400 mt-2 ml-10">[{q.marks} mark{q.marks !== 1 ? "s" : ""}]</p>
+              <p className="text-xs text-gray-400 mt-2 ml-0 sm:ml-10">[{q.marks} mark{q.marks !== 1 ? "s" : ""}]</p>
             </div>
           )
         })}
 
+        {/* Mobile question navigator (inline, above submit) */}
+        <div className="md:hidden bg-white rounded-xl border border-gray-200 p-3">
+          <p className="text-xs font-medium text-gray-500 mb-2">Jump to Question</p>
+          <div className="grid gap-1.5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(2rem, 1fr))" }}>
+            {test.questions.map((q, idx) => {
+              const isAnswered = answers[q._id] !== null && answers[q._id] !== undefined
+              return (
+                <a
+                  key={q._id}
+                  href={`#q-${idx}`}
+                  className={`h-8 rounded text-xs font-medium flex items-center justify-center transition-colors ${
+                    isAnswered ? "bg-[#1e3a5f] text-white" : "bg-gray-100 text-gray-600"
+                  }`}
+                >
+                  {idx + 1}
+                </a>
+              )
+            })}
+          </div>
+        </div>
+
         {/* Submit Button */}
-        <div className="pb-8">
+        <div className="pb-4">
           <div className="bg-white rounded-xl border border-gray-200 p-5 text-center">
             <p className="text-sm text-gray-600 mb-1">
               Answered: <strong>{answeredCount}</strong> / {test.questions.length}
             </p>
             {answeredCount < test.questions.length && (
               <p className="text-xs text-orange-600 mb-3">
-                {test.questions.length - answeredCount} question{test.questions.length - answeredCount !== 1 ? "s" : ""} unanswered — they will be marked as skipped
+                {test.questions.length - answeredCount} question{test.questions.length - answeredCount !== 1 ? "s" : ""} unanswered — marked as skipped
               </p>
             )}
             <button
@@ -314,8 +335,8 @@ function TestPage({ params }: { params: Promise<{ testId: string }> }) {
         </div>
       </main>
 
-      {/* Question Navigator (floating) */}
-      <div className="fixed bottom-4 right-4 bg-white rounded-xl border border-gray-200 shadow-lg p-3 max-w-[200px]">
+      {/* Question Navigator — desktop floating only */}
+      <div className="hidden md:block fixed bottom-4 right-4 bg-white rounded-xl border border-gray-200 shadow-lg p-3 max-w-[200px]">
         <p className="text-xs font-medium text-gray-500 mb-2">Questions</p>
         <div className="grid grid-cols-5 gap-1">
           {test.questions.map((q, idx) => {

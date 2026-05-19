@@ -26,9 +26,7 @@ export default function SubjectsPage() {
     setSeeding(false)
   }
 
-  function handlePrint() {
-    window.print()
-  }
+  function handlePrint() { window.print() }
 
   function handleDownloadCSV() {
     if (!data) return
@@ -51,7 +49,6 @@ export default function SubjectsPage() {
 
   return (
     <>
-      {/* Print styles — hidden on screen, shown only when printing */}
       <style>{`
         @media print {
           body * { visibility: hidden; }
@@ -61,15 +58,19 @@ export default function SubjectsPage() {
         }
       `}</style>
 
-      <div className="p-6 max-w-4xl">
-        <div className="flex items-center justify-between mb-6 no-print">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Subject Admin Credentials</h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              One login per subject. Share each row only with the concerned teacher.
-            </p>
+      <div className="p-4 sm:p-6 max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="mb-6 no-print">
+          <div className="flex flex-wrap items-start gap-3 mb-2">
+            <div className="flex-1 min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Subject Admin Credentials</h1>
+              <p className="text-sm text-gray-500 mt-0.5">
+                One login per subject. Share each row only with the concerned teacher.
+              </p>
+            </div>
           </div>
-          <div className="flex gap-2 flex-wrap justify-end">
+          {/* Action buttons — wrap on mobile */}
+          <div className="flex flex-wrap gap-2 mt-3">
             {!revealed ? (
               <button onClick={load}
                 className="bg-[#1e3a5f] hover:bg-[#162d4a] text-white px-4 py-2 rounded-lg text-sm font-medium">
@@ -88,7 +89,7 @@ export default function SubjectsPage() {
               </>
             )}
             <button onClick={seed} disabled={seeding}
-              className="bg-[#8b1a1a] hover:bg-[#6f1515] text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-60 no-print">
+              className="bg-[#8b1a1a] hover:bg-[#6f1515] text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-60">
               {seeding ? "Seeding..." : "Re-seed Accounts"}
             </button>
           </div>
@@ -108,62 +109,64 @@ export default function SubjectsPage() {
 
         {data && (
           <div id="cred-printable">
-            {/* Print header — only shown when printing */}
+            {/* Print header */}
             <div className="hidden print:block mb-6 text-center border-b pb-4">
               <p className="text-xs uppercase tracking-widest text-gray-500">Gautam Buddha Mahila College, Gaya</p>
               <h2 className="text-xl font-bold mt-1">Admin Login Credentials</h2>
               <p className="text-xs text-gray-500 mt-1">Confidential — do not distribute publicly</p>
             </div>
 
-            {/* Master admin card — screen only, hidden when printing */}
+            {/* Master admin card */}
             <div className="bg-[#1e3a5f] text-white rounded-xl p-4 mb-4 print:hidden">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs text-blue-200 print:text-gray-500 uppercase tracking-wide font-semibold">Master Admin</p>
-                <span className="text-xs bg-white/20 print:bg-gray-100 print:text-gray-700 text-white px-2 py-0.5 rounded-full">Full Access</span>
+                <p className="text-xs text-blue-200 uppercase tracking-wide font-semibold">Master Admin</p>
+                <span className="text-xs bg-white/20 text-white px-2 py-0.5 rounded-full">Full Access</span>
               </div>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-blue-300 print:text-gray-500 text-xs">Username</span>
-                  <p className="font-mono font-bold text-lg mt-0.5">{data.master.username}</p>
+                  <span className="text-blue-300 text-xs">Username</span>
+                  <p className="font-mono font-bold text-base sm:text-lg mt-0.5 break-all">{data.master.username}</p>
                 </div>
                 <div>
-                  <span className="text-blue-300 print:text-gray-500 text-xs">Password</span>
-                  <p className="font-mono font-bold text-lg mt-0.5">{data.master.password}</p>
+                  <span className="text-blue-300 text-xs">Password</span>
+                  <p className="font-mono font-bold text-base sm:text-lg mt-0.5 break-all">{data.master.password}</p>
                 </div>
               </div>
-              <p className="text-xs text-blue-300 print:text-gray-500 mt-3">
+              <p className="text-xs text-blue-300 mt-3">
                 Can view all subjects, manage students, and access this credentials page.
               </p>
             </div>
 
             {/* Subject admins table */}
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+              <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex flex-wrap items-center justify-between gap-2">
                 <h3 className="font-semibold text-gray-800 text-sm">Subject Admin Logins ({data.subjects.length} subjects)</h3>
-                <span className="text-xs text-gray-500">Login URL: <span className="font-mono">/admin/login</span></span>
+                <span className="text-xs text-gray-500">Login: <span className="font-mono">/admin/login</span></span>
               </div>
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="text-left px-4 py-2.5 font-medium text-gray-600">#</th>
-                    <th className="text-left px-4 py-2.5 font-medium text-gray-600">Subject</th>
-                    <th className="text-left px-4 py-2.5 font-medium text-gray-600">Username</th>
-                    <th className="text-left px-4 py-2.5 font-medium text-gray-600">Password</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {data.subjects.map((s, i) => (
-                    <tr key={s.username} className="hover:bg-gray-50">
-                      <td className="px-4 py-2.5 text-gray-400 text-xs">{i + 1}</td>
-                      <td className="px-4 py-2.5 font-medium text-gray-900">{s.subject}</td>
-                      <td className="px-4 py-2.5 font-mono text-[#1e3a5f]">{s.username}</td>
-                      <td className="px-4 py-2.5 font-mono font-semibold text-gray-800">{s.password}</td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[400px]">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="text-left px-4 py-2.5 font-medium text-gray-600">#</th>
+                      <th className="text-left px-4 py-2.5 font-medium text-gray-600">Subject</th>
+                      <th className="text-left px-4 py-2.5 font-medium text-gray-600">Username</th>
+                      <th className="text-left px-4 py-2.5 font-medium text-gray-600">Password</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 text-xs text-gray-400 print:block">
-                Each subject admin can only view and manage tests & results for their own subject.
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {data.subjects.map((s, i) => (
+                      <tr key={s.username} className="hover:bg-gray-50">
+                        <td className="px-4 py-2.5 text-gray-400 text-xs">{i + 1}</td>
+                        <td className="px-4 py-2.5 font-medium text-gray-900">{s.subject}</td>
+                        <td className="px-4 py-2.5 font-mono text-[#1e3a5f] text-xs sm:text-sm">{s.username}</td>
+                        <td className="px-4 py-2.5 font-mono font-semibold text-gray-800 text-xs sm:text-sm">{s.password}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 text-xs text-gray-400">
+                Each subject admin can only view and manage tests &amp; results for their own subject.
               </div>
             </div>
           </div>

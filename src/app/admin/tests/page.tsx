@@ -52,12 +52,12 @@ export default function TestsPage() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Tests</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Tests</h1>
         <Link
           href="/admin/tests/new"
-          className="bg-[#8b1a1a] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#6f1515]"
+          className="bg-[#8b1a1a] text-white px-3 sm:px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#6f1515] transition-colors shrink-0"
         >
           + Create Test
         </Link>
@@ -75,66 +75,61 @@ export default function TestsPage() {
           <div className="divide-y divide-gray-100">
             {tests.map((t) => (
               <div key={t._id} className="p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <Link href={`/admin/tests/${t._id}`} className="font-semibold text-[#1e3a5f] hover:underline">
-                        {t.title}
-                      </Link>
-                    </div>
-                    <div className="flex flex-wrap gap-2 mt-1.5">
-                      <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">{t.paper || t.subject}</span>
-                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{t.subject}</span>
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{t.course} · {t.session}</span>
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Sem {semesterLabel(t.semester)}</span>
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{t.duration} min</span>
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{t.totalMarks} marks</span>
-                    </div>
-                    <p className="text-xs text-gray-400 mt-1">
-                      By: <span className="text-gray-500 font-medium">{t.createdBy}</span>
-                      {" · "}Starts: {new Date(t.startTime).toLocaleString("en-IN")}
-                      {t.endTime && ` · Ends: ${new Date(t.endTime).toLocaleString("en-IN")}`}
-                    </p>
+                {/* Title & badges */}
+                <div className="mb-3">
+                  <Link href={`/admin/tests/${t._id}`} className="font-semibold text-[#1e3a5f] hover:underline">
+                    {t.title}
+                  </Link>
+                  <div className="flex flex-wrap gap-1.5 mt-1.5">
+                    <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">{t.paper || t.subject}</span>
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{t.subject}</span>
+                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{t.course} · {t.session}</span>
+                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Sem {semesterLabel(t.semester)}</span>
+                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{t.duration} min</span>
+                    <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{t.totalMarks} marks</span>
                   </div>
+                  <p className="text-xs text-gray-400 mt-1.5">
+                    By: <span className="text-gray-500 font-medium">{t.createdBy}</span>
+                    {" · "}Starts: {new Date(t.startTime).toLocaleString("en-IN")}
+                    {t.endTime && ` · Ends: ${new Date(t.endTime).toLocaleString("en-IN")}`}
+                  </p>
+                </div>
 
-                  <div className="flex flex-col gap-2 items-end">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => toggleField(t._id, "isPublished", t.isPublished)}
-                        className={`text-xs px-3 py-1 rounded-full border transition-colors ${
-                          t.isPublished
-                            ? "bg-green-100 text-green-700 border-green-200 hover:bg-green-200"
-                            : "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200"
-                        }`}
-                      >
-                        {t.isPublished ? "✓ Published" : "Publish"}
-                      </button>
-                      <button
-                        onClick={() => toggleField(t._id, "isResultPublished", t.isResultPublished)}
-                        className={`text-xs px-3 py-1 rounded-full border transition-colors ${
-                          t.isResultPublished
-                            ? "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200"
-                            : "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200"
-                        }`}
-                      >
-                        {t.isResultPublished ? "✓ Results Out" : "Publish Results"}
-                      </button>
-                    </div>
-                    <div className="flex gap-2">
-                      <Link
-                        href={`/admin/tests/${t._id}`}
-                        className="text-xs text-[#1e3a5f] hover:underline"
-                      >
-                        View Attempts
-                      </Link>
-                      <button
-                        onClick={() => deleteTest(t._id)}
-                        className="text-xs text-red-500 hover:text-red-700"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
+                {/* Actions row — wraps on mobile */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => toggleField(t._id, "isPublished", t.isPublished)}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                      t.isPublished
+                        ? "bg-green-100 text-green-700 border-green-200 hover:bg-green-200"
+                        : "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200"
+                    }`}
+                  >
+                    {t.isPublished ? "✓ Published" : "Publish"}
+                  </button>
+                  <button
+                    onClick={() => toggleField(t._id, "isResultPublished", t.isResultPublished)}
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                      t.isResultPublished
+                        ? "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200"
+                        : "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200"
+                    }`}
+                  >
+                    {t.isResultPublished ? "✓ Results Out" : "Publish Results"}
+                  </button>
+                  <span className="flex-1" />
+                  <Link
+                    href={`/admin/tests/${t._id}`}
+                    className="text-xs text-[#1e3a5f] hover:underline px-1"
+                  >
+                    View Attempts
+                  </Link>
+                  <button
+                    onClick={() => deleteTest(t._id)}
+                    className="text-xs text-red-500 hover:text-red-700 px-1"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
             ))}

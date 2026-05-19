@@ -106,9 +106,7 @@ export default function TestDetailPage({ params }: { params: Promise<{ testId: s
   const topScore = top ? top.percentage.toFixed(1) : null
 
   if (loading) {
-    return (
-      <div className="p-6 text-gray-400">Loading...</div>
-    )
+    return <div className="p-6 text-gray-400">Loading...</div>
   }
 
   if (!test) {
@@ -130,23 +128,27 @@ export default function TestDetailPage({ params }: { params: Promise<{ testId: s
         .no-print { display: none !important; }
       }
     `}</style>
-    <div className="p-6" id="results-printable">
-      <div className="flex items-center gap-4 mb-6 flex-wrap">
-        <button onClick={() => router.push("/admin/tests")} className="text-sm text-gray-500 hover:text-gray-700">← Tests</button>
-        <h1 className="text-2xl font-bold text-gray-900 flex-1">{test.title}</h1>
+    <div className="p-4 sm:p-6" id="results-printable">
+
+      {/* Header — wraps on mobile */}
+      <div className="flex flex-wrap items-start gap-3 mb-6">
+        <button onClick={() => router.push("/admin/tests")} className="text-sm text-gray-500 hover:text-gray-700 shrink-0 mt-1">
+          ← Tests
+        </button>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex-1 min-w-0">{test.title}</h1>
         {attempts.length > 0 && (
-          <div className="flex gap-2 no-print">
+          <div className="flex gap-2 no-print w-full sm:w-auto">
             <button
               onClick={handlePrint}
-              className="border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5"
+              className="flex-1 sm:flex-none border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-1.5 rounded-lg text-sm flex items-center justify-center gap-1.5"
             >
               🖨️ Print
             </button>
             <button
               onClick={downloadCSV}
-              className="border border-[#1e3a5f] text-[#1e3a5f] hover:bg-blue-50 px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5"
+              className="flex-1 sm:flex-none border border-[#1e3a5f] text-[#1e3a5f] hover:bg-blue-50 px-3 py-1.5 rounded-lg text-sm flex items-center justify-center gap-1.5"
             >
-              ⬇️ Download CSV
+              ⬇️ CSV
             </button>
           </div>
         )}
@@ -154,7 +156,7 @@ export default function TestDetailPage({ params }: { params: Promise<{ testId: s
 
       {/* Test Info + Controls */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
           <h2 className="font-semibold text-gray-700 mb-3">Test Details</h2>
           <dl className="space-y-2 text-sm">
             {[
@@ -168,8 +170,8 @@ export default function TestDetailPage({ params }: { params: Promise<{ testId: s
               ["End Time", test.endTime ? new Date(test.endTime).toLocaleString("en-IN") : "Open-ended"],
             ].map(([k, v]) => (
               <div key={k} className="flex gap-2">
-                <dt className="text-gray-500 w-28 shrink-0">{k}</dt>
-                <dd className="text-gray-900 font-medium">{v}</dd>
+                <dt className="text-gray-500 w-24 sm:w-28 shrink-0 text-xs sm:text-sm">{k}</dt>
+                <dd className="text-gray-900 font-medium text-xs sm:text-sm min-w-0">{v}</dd>
               </div>
             ))}
           </dl>
@@ -177,7 +179,7 @@ export default function TestDetailPage({ params }: { params: Promise<{ testId: s
 
         <div className="space-y-3">
           {/* Controls */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
             <h2 className="font-semibold text-gray-700 mb-3">Controls</h2>
             <div className="space-y-2">
               <button
@@ -188,7 +190,7 @@ export default function TestDetailPage({ params }: { params: Promise<{ testId: s
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
               >
-                {test.isPublished ? "✓ Test Published (click to unpublish)" : "Publish Test"}
+                {test.isPublished ? "✓ Test Published (tap to unpublish)" : "Publish Test"}
               </button>
               <button
                 onClick={() => toggleField("isResultPublished")}
@@ -198,26 +200,26 @@ export default function TestDetailPage({ params }: { params: Promise<{ testId: s
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
               >
-                {test.isResultPublished ? "✓ Results Published (click to hide)" : "Publish Results"}
+                {test.isResultPublished ? "✓ Results Published (tap to hide)" : "Publish Results"}
               </button>
             </div>
           </div>
 
           {/* Stats */}
           {attempts.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
               <h2 className="font-semibold text-gray-700 mb-3">Statistics</h2>
               <div className="grid grid-cols-3 gap-3 text-center">
                 <div>
-                  <div className="text-2xl font-bold text-[#1e3a5f]">{attempts.length}</div>
+                  <div className="text-xl sm:text-2xl font-bold text-[#1e3a5f]">{attempts.length}</div>
                   <div className="text-xs text-gray-500">Attempts</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-[#1e3a5f]">{avg}%</div>
+                  <div className="text-xl sm:text-2xl font-bold text-[#1e3a5f]">{avg}%</div>
                   <div className="text-xs text-gray-500">Avg Score</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold text-[#1e3a5f]">{topScore}%</div>
+                  <div className="text-xl sm:text-2xl font-bold text-[#1e3a5f]">{topScore}%</div>
                   <div className="text-xs text-gray-500">Top Score</div>
                 </div>
               </div>
@@ -238,42 +240,44 @@ export default function TestDetailPage({ params }: { params: Promise<{ testId: s
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Rank</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Student</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Roll No.</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Score</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">%</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Grade</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Time</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Submitted</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {attempts.map((a) => {
-                  const grade = getGrade(a.percentage)
-                  const gradeColor = getGradeColor(grade)
-                  return (
-                    <tr key={a._id} className={`hover:bg-gray-50 ${a.rank === 1 ? "bg-yellow-50" : ""}`}>
-                      <td className="px-4 py-3 font-bold text-[#1e3a5f]">
-                        {a.rank === 1 ? "🥇" : a.rank === 2 ? "🥈" : a.rank === 3 ? "🥉" : `#${a.rank}`}
-                      </td>
-                      <td className="px-4 py-3 font-medium text-gray-900">{a.studentName}</td>
-                      <td className="px-4 py-3 text-gray-600">{a.rollNumber}</td>
-                      <td className="px-4 py-3 text-gray-900">{a.score}/{a.maxScore}</td>
-                      <td className="px-4 py-3 font-semibold text-gray-900">{a.percentage.toFixed(1)}%</td>
-                      <td className={`px-4 py-3 font-medium text-xs ${gradeColor}`}>{grade}</td>
-                      <td className="px-4 py-3 text-gray-500">{formatTime(a.timeTaken)}</td>
-                      <td className="px-4 py-3 text-gray-400 text-xs">
-                        {new Date(a.submittedAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[600px]">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Rank</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Student</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Roll No.</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Score</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">%</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Grade</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Time</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Submitted</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {attempts.map((a) => {
+                    const grade = getGrade(a.percentage)
+                    const gradeColor = getGradeColor(grade)
+                    return (
+                      <tr key={a._id} className={`hover:bg-gray-50 ${a.rank === 1 ? "bg-yellow-50" : ""}`}>
+                        <td className="px-4 py-3 font-bold text-[#1e3a5f] whitespace-nowrap">
+                          {a.rank === 1 ? "🥇" : a.rank === 2 ? "🥈" : a.rank === 3 ? "🥉" : `#${a.rank}`}
+                        </td>
+                        <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{a.studentName}</td>
+                        <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{a.rollNumber}</td>
+                        <td className="px-4 py-3 text-gray-900 whitespace-nowrap">{a.score}/{a.maxScore}</td>
+                        <td className="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">{a.percentage.toFixed(1)}%</td>
+                        <td className={`px-4 py-3 font-medium text-xs whitespace-nowrap ${gradeColor}`}>{grade}</td>
+                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{formatTime(a.timeTaken)}</td>
+                        <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
+                          {new Date(a.submittedAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

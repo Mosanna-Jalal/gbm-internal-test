@@ -147,8 +147,8 @@ function ResultPage({ params }: { params: Promise<{ attemptId: string }> }) {
             </div>
 
             {/* Student + Test Info */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
-              <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
                 {[
                   ["Student", result.studentName],
                   ["Roll Number", result.rollNumber],
@@ -159,9 +159,9 @@ function ResultPage({ params }: { params: Promise<{ attemptId: string }> }) {
                   ["Submitted", submittedOn],
                   ["Time Taken", `${minutes}m ${seconds}s of ${test.duration} min`],
                 ].map(([k, v]) => (
-                  <div key={k}>
+                  <div key={k} className="min-w-0">
                     <span className="text-gray-400 text-xs">{k}</span>
-                    <p className="font-medium text-gray-900 text-sm">{v}</p>
+                    <p className="font-medium text-gray-900 text-sm break-words">{v}</p>
                   </div>
                 ))}
               </div>
@@ -263,17 +263,17 @@ function ResultPage({ params }: { params: Promise<{ attemptId: string }> }) {
                         return (
                           <div key={q._id} className="p-4">
                             {/* Question */}
-                            <div className="flex items-start gap-3 mb-3">
+                            <div className="flex items-start gap-2 mb-3">
                               <span className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
                                 isSkipped ? "bg-gray-100 text-gray-500" :
                                 isCorrect ? "bg-green-100 text-green-700" :
                                 "bg-red-100 text-red-600"
                               }`}>{idx + 1}</span>
-                              <p className="text-sm text-gray-800 leading-snug flex-1">{q.text}</p>
+                              <p className="text-sm text-gray-800 leading-snug flex-1 min-w-0">{q.text}</p>
                             </div>
 
                             {/* Options */}
-                            <div className="ml-9 space-y-1.5 mb-2">
+                            <div className="ml-0 sm:ml-9 space-y-1.5 mb-2">
                               {q.options.map((opt, oi) => {
                                 const isChosen = chosen === oi
                                 const isRight  = q.correctIndex === oi
@@ -288,23 +288,23 @@ function ResultPage({ params }: { params: Promise<{ attemptId: string }> }) {
                                   isRight              ? "bg-green-500 text-white" :
                                                          "bg-gray-200 text-gray-500"
                                 return (
-                                  <div key={oi} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm ${bg}`}>
-                                    <span className={`w-5 h-5 rounded-full text-[11px] flex items-center justify-center font-bold shrink-0 ${dotBg}`}>
+                                  <div key={oi} className={`flex items-start gap-2 px-3 py-2 rounded-lg border text-sm ${bg}`}>
+                                    <span className={`w-5 h-5 rounded-full text-[11px] flex items-center justify-center font-bold shrink-0 mt-0.5 ${dotBg}`}>
                                       {String.fromCharCode(65 + oi)}
                                     </span>
-                                    <span className={`flex-1 ${(isChosen || isRight) ? "font-medium text-gray-900" : "text-gray-700"}`}>
-                                      {opt}
+                                    <span className={`flex-1 min-w-0 ${(isChosen || isRight) ? "font-medium text-gray-900" : "text-gray-700"}`}>
+                                      <span className="block">{opt}</span>
+                                      {isChosen && isRight  && <span className="block text-xs text-green-600 mt-0.5">✓ Your answer · Correct</span>}
+                                      {isChosen && !isRight && <span className="block text-xs text-red-500 mt-0.5">✗ Your answer · Wrong</span>}
+                                      {!isChosen && isRight && <span className="block text-xs text-green-600 mt-0.5">✓ Correct answer</span>}
                                     </span>
-                                    {isChosen && isRight  && <span className="text-xs text-green-600 shrink-0">✓ Your answer · Correct</span>}
-                                    {isChosen && !isRight && <span className="text-xs text-red-500 shrink-0">✗ Your answer</span>}
-                                    {!isChosen && isRight && <span className="text-xs text-green-600 shrink-0">✓ Correct answer</span>}
                                   </div>
                                 )
                               })}
                             </div>
 
                             {/* Marks badge */}
-                            <p className={`ml-9 text-xs font-semibold ${
+                            <p className={`ml-0 sm:ml-9 text-xs font-semibold ${
                               isSkipped ? "text-gray-400" :
                               isCorrect ? "text-green-600" : "text-red-500"
                             }`}>{marksLabel}</p>

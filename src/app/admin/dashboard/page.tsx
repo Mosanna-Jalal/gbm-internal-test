@@ -33,51 +33,50 @@ export default function DashboardPage() {
   }, [])
 
   return (
-    <div className="p-6 max-w-5xl">
+    <div className="p-4 sm:p-6 max-w-5xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
         {adminName && <p className="text-sm text-gray-500 mt-0.5">Welcome, {adminName}</p>}
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      {/* Stats — 3 columns, responsive padding */}
+      <div className="grid grid-cols-3 gap-3 mb-6">
         {[
-          { label: "Total Questions", value: stats?.totalQuestions, icon: "❓", href: "/admin/tests" },
-          { label: "Total Tests", value: stats?.totalTests, icon: "📝", href: "/admin/tests" },
-          { label: "Total Attempts", value: stats?.totalAttempts, icon: "✍️", href: "/admin/tests" },
+          { label: "Questions", value: stats?.totalQuestions, icon: "❓", href: "/admin/tests" },
+          { label: "Tests",     value: stats?.totalTests,     icon: "📝", href: "/admin/tests" },
+          { label: "Attempts",  value: stats?.totalAttempts,  icon: "✍️", href: "/admin/tests" },
         ].map((s) => (
           <Link key={s.label} href={s.href}>
-            <div className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
-              <div className="text-2xl mb-2">{s.icon}</div>
-              <div className="text-3xl font-bold text-[#1e3a5f]">
+            <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-5 hover:shadow-md transition-shadow">
+              <div className="text-xl sm:text-2xl mb-1 sm:mb-2">{s.icon}</div>
+              <div className="text-2xl sm:text-3xl font-bold text-[#1e3a5f]">
                 {stats ? s.value : "—"}
               </div>
-              <div className="text-sm text-gray-500 mt-1">{s.label}</div>
+              <div className="text-xs text-gray-500 mt-0.5 leading-tight">{s.label}</div>
             </div>
           </Link>
         ))}
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-2 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
         <Link
           href="/admin/tests/new"
           className="bg-[#8b1a1a] text-white rounded-xl p-4 hover:bg-[#6f1515] transition-colors"
         >
-          <div className="text-xl mb-1">+ Create Test</div>
+          <div className="text-lg sm:text-xl mb-1">+ Create Test</div>
           <div className="text-xs text-red-200">Create a new MCQ test with questions</div>
         </Link>
         <Link
           href="/admin/students"
           className="bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl p-4 transition-colors"
         >
-          <div className="text-xl mb-1">🎓 Students</div>
+          <div className="text-lg sm:text-xl mb-1">🎓 Students</div>
           <div className="text-xs text-emerald-200">
-            {studentCount !== null ? `${studentCount} in DB · ` : ""}Upload & manage admission lists
+            {studentCount !== null ? `${studentCount} in DB · ` : ""}Upload &amp; manage admission lists
           </div>
         </Link>
       </div>
-
 
       {/* Recent Tests */}
       <div>
@@ -95,39 +94,41 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Title</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Department</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Sem</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {stats.recentTests.map((t) => (
-                  <tr key={t._id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <Link href={`/admin/tests/${t._id}`} className="font-medium text-[#1e3a5f] hover:underline">
-                        {t.title}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{t.subject}</td>
-                    <td className="px-4 py-3 text-gray-600">Sem {semesterLabel(t.semester)}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2">
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${t.isPublished ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
-                          {t.isPublished ? "Published" : "Draft"}
-                        </span>
-                        {t.isResultPublished && (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Results Out</span>
-                        )}
-                      </div>
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm min-w-[480px]">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Title</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Department</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Sem</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-600">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {stats.recentTests.map((t) => (
+                    <tr key={t._id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3">
+                        <Link href={`/admin/tests/${t._id}`} className="font-medium text-[#1e3a5f] hover:underline">
+                          {t.title}
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">{t.subject}</td>
+                      <td className="px-4 py-3 text-gray-600 whitespace-nowrap">Sem {semesterLabel(t.semester)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2 flex-wrap">
+                          <span className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${t.isPublished ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                            {t.isPublished ? "Published" : "Draft"}
+                          </span>
+                          {t.isResultPublished && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 whitespace-nowrap">Results Out</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>

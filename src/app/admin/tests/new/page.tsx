@@ -237,10 +237,10 @@ function NewTestPage() {
   }
 
   return (
-    <div className="p-6 max-w-3xl">
+    <div className="p-4 sm:p-6 max-w-3xl mx-auto">
       {/* Toast */}
       {toast && (
-        <div className="fixed top-5 right-5 z-50 max-w-sm w-full">
+        <div className="fixed top-4 left-4 right-4 sm:left-auto sm:right-5 sm:top-5 z-50 sm:max-w-sm">
           <div className="bg-[#1e3a5f] text-white rounded-2xl shadow-2xl border border-blue-400/20 p-4 flex items-start gap-3">
             <div className="text-2xl shrink-0">⏰</div>
             <div className="flex-1 min-w-0">
@@ -252,8 +252,8 @@ function NewTestPage() {
         </div>
       )}
       <div className="flex items-center gap-4 mb-6">
-        <button onClick={() => router.back()} className="text-sm text-gray-500 hover:text-gray-700">← Back</button>
-        <h1 className="text-2xl font-bold text-gray-900">Create Test</h1>
+        <button onClick={() => router.back()} className="text-sm text-gray-500 hover:text-gray-700 shrink-0">← Back</button>
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Create Test</h1>
       </div>
 
       <div className="space-y-6">
@@ -261,14 +261,14 @@ function NewTestPage() {
         <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
           <h2 className="font-semibold text-gray-800">Test Details</h2>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="col-span-1 sm:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Test Title <span className="text-red-500">*</span></label>
               <input type="text" value={title} onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Accounts CIA-1 2025"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]" />
             </div>
-            <div className="col-span-2">
+            <div className="col-span-1 sm:col-span-2">
               <label className="block text-sm font-medium text-gray-700 mb-1">Teacher Name <span className="text-red-500">*</span></label>
               <input type="text" value={teacherName} onChange={(e) => setTeacherName(e.target.value)}
                 placeholder="e.g. Dr. Sunita Sharma"
@@ -324,7 +324,7 @@ function NewTestPage() {
               </div>
             </>
           ) : (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Session <span className="text-red-500">*</span></label>
                 <select value={session} onChange={(e) => handleSessionChange(e.target.value as Session)}
@@ -381,7 +381,7 @@ function NewTestPage() {
                   </select>
                 )}
               </div>
-              <div className="col-span-2">
+              <div className="col-span-1 sm:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Paper <span className="text-red-500">*</span></label>
                 {!subject ? (
                   <div className="border border-gray-200 bg-gray-50 rounded-lg px-3 py-2 text-xs text-gray-400">Select a department first</div>
@@ -403,10 +403,10 @@ function NewTestPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes) <span className="text-red-500">*</span></label>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <input type="number" min="5" max="180" value={duration} onChange={(e) => setDuration(e.target.value)}
-                className="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]" />
-              <div className="flex gap-1.5">
+                className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]" />
+              <div className="flex flex-wrap gap-1.5">
                 {[15, 20, 30, 45, 60, 90].map((d) => (
                   <button key={d} type="button" onClick={() => setDuration(String(d))}
                     className={`px-2.5 py-1 rounded-md text-xs border transition-colors ${duration === String(d) ? "bg-[#1e3a5f] text-white border-[#1e3a5f]" : "border-gray-200 text-gray-600 hover:border-[#1e3a5f] hover:text-[#1e3a5f] bg-white"}`}>
