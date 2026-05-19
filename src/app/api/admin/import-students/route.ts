@@ -70,12 +70,17 @@ function normaliseDepartment(raw: string): string {
  * Extracts session (23-27 → 2023-27) and department abbreviation (BOT → BOTANY).
  */
 function parseGBMCRoll(val: string): { session?: string; department?: string } {
-  const match = val.match(/GBMC\/(\d{2})-(\d{2})\/SEM\s+[IVX]+\/([A-Z]+)\//i)
-  if (!match) return {}
-  const [, yy1, yy2, deptAbbr] = match
+  // Format: GBMC/YY-YY/<anything>/DEPT/<number>
+  // Split is robust — works regardless of semester label variation (SEM VI, SEM-VI, 6, etc.)
+  const parts = val.split("/")
+  if (parts.length < 4) return {}
+  const sessionPart = parts[1].trim()
+  if (!/^\d{2}-\d{2}$/.test(sessionPart)) return {}
+  const [yy1, yy2] = sessionPart.split("-")
   const session = `20${yy1}-${yy2}`
-  const department = normaliseDepartment(deptAbbr)
-  return { session, department }
+  const deptAbbr = parts[3].replace(/[^A-Za-z]/g, "").trim().toUpperCase()
+  const department = deptAbbr ? normaliseDepartment(deptAbbr) : undefined
+  return { session, department: department || undefined }
 }
 
 function normaliseHeader(h: string): string {

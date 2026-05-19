@@ -190,18 +190,44 @@ export default function StudentsPage() {
     for (const file of files) form.append("files", file)
     try {
       // XHR provides real upload progress; fetch does not
+      // Phase 1 (0-70%): real XHR upload transfer progress
+      // Phase 2 (70-95%): slow animation while server processes
+      // Phase 3 (100%): server responded
       const data = await new Promise<Record<string, unknown>>((resolve, reject) => {
         const xhr = new XMLHttpRequest()
+        let processingInterval: ReturnType<typeof setInterval> | null = null
+
         xhr.upload.addEventListener("progress", (e) => {
-          if (e.lengthComputable)
-            setUploadProgress(Math.min(95, Math.round((e.loaded / e.total) * 100)))
+          if (e.lengthComputable) {
+            const pct = Math.round((e.loaded / e.total) * 70)
+            setUploadProgress(pct)
+          }
         })
+
+        xhr.upload.addEventListener("load", () => {
+          // Upload transfer done — now waiting for server; animate slowly 70→95
+          let current = 70
+          setUploadProgress(current)
+          processingInterval = setInterval(() => {
+            current = Math.min(95, current + 1)
+            setUploadProgress(current)
+            if (current >= 95 && processingInterval) {
+              clearInterval(processingInterval)
+              processingInterval = null
+            }
+          }, 300)
+        })
+
         xhr.addEventListener("load", () => {
+          if (processingInterval) { clearInterval(processingInterval); processingInterval = null }
           setUploadProgress(100)
           try { resolve(JSON.parse(xhr.responseText)) }
           catch { reject(new Error("Invalid server response")) }
         })
-        xhr.addEventListener("error", () => reject(new Error("Network error")))
+        xhr.addEventListener("error", () => {
+          if (processingInterval) { clearInterval(processingInterval); processingInterval = null }
+          reject(new Error("Network error"))
+        })
         xhr.open("POST", "/api/admin/import-students")
         xhr.send(form)
       })
