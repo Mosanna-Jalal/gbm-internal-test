@@ -74,6 +74,7 @@ export default function StudentsPage() {
 
   const [importing,      setImporting]      = useState(false)
   const [uploadingName,  setUploadingName]  = useState("")
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadDone,     setUploadDone]     = useState(false)
   const [toast,          setToast]          = useState<ImportToast | null>(null)
   const toastTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -188,21 +189,36 @@ export default function StudentsPage() {
     const form = new FormData()
     for (const file of files) form.append("files", file)
     try {
-      const res  = await fetch("/api/admin/import-students", { method: "POST", body: form })
-      const data = await res.json()
-      if (!res.ok) {
-        showToast({ type: "error", lines: [data.error ?? "Import failed"] })
+      // XHR provides real upload progress; fetch does not
+      const data = await new Promise<Record<string, unknown>>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.upload.addEventListener("progress", (e) => {
+          if (e.lengthComputable)
+            setUploadProgress(Math.min(95, Math.round((e.loaded / e.total) * 100)))
+        })
+        xhr.addEventListener("load", () => {
+          setUploadProgress(100)
+          try { resolve(JSON.parse(xhr.responseText)) }
+          catch { reject(new Error("Invalid server response")) }
+        })
+        xhr.addEventListener("error", () => reject(new Error("Network error")))
+        xhr.open("POST", "/api/admin/import-students")
+        xhr.send(form)
+      })
+
+      if (!data.success) {
+        showToast({ type: "error", lines: [String(data.error ?? "Import failed")] })
         return
       }
-      const lines: string[] = []
-      if (data.imported > 0)
-        lines.push(`${data.imported} new student${data.imported !== 1 ? "s" : ""} added`)
-      if (data.updated > 0)
-        lines.push(`${data.updated} existing student${data.updated !== 1 ? "s" : ""} updated`)
-      if (data.departmentFilled > 0)
-        lines.push(`Department filled for ${data.departmentFilled} student${data.departmentFilled !== 1 ? "s" : ""}`)
-      if (data.errors?.length)
-        lines.push(`${data.errors.length} file${data.errors.length !== 1 ? "s" : ""} had errors`)
+      const imported         = Number(data.imported         ?? 0)
+      const updated          = Number(data.updated          ?? 0)
+      const departmentFilled = Number(data.departmentFilled ?? 0)
+      const errors           = Array.isArray(data.errors) ? data.errors as string[] : []
+      const lines: string[]  = []
+      if (imported > 0)         lines.push(`${imported} new student${imported !== 1 ? "s" : ""} added`)
+      if (updated > 0)          lines.push(`${updated} existing student${updated !== 1 ? "s" : ""} updated`)
+      if (departmentFilled > 0) lines.push(`Department filled for ${departmentFilled} student${departmentFilled !== 1 ? "s" : ""}`)
+      if (errors.length)        lines.push(`${errors.length} file${errors.length !== 1 ? "s" : ""} had errors`)
       if (lines.length === 0) {
         showToast({ type: "info", lines: ["All records are already up to date.", "No new data was found in the file."] })
       } else {
@@ -216,15 +232,13 @@ export default function StudentsPage() {
     } catch {
       showToast({ type: "error", lines: ["Upload failed. Please try again."] })
     } finally {
-      // Reset any direct DOM styles applied in handleUpload
       if (uploadBtnRef.current) {
         uploadBtnRef.current.style.opacity = ""
         uploadBtnRef.current.style.pointerEvents = ""
         uploadBtnRef.current.style.cursor = ""
-        uploadBtnRef.current.removeAttribute("aria-disabled")
-        uploadBtnRef.current.removeAttribute("data-uploading")
       }
       setImporting(false)
+      setUploadProgress(0)
       setUploadingName("")
       if (fileRef.current) fileRef.current.value = ""
     }
@@ -317,25 +331,55 @@ export default function StudentsPage() {
                 Clear All
               </button>
             )}
-            <div className="flex flex-col items-end gap-1">
+            <div className="flex flex-col items-end gap-1.5">
               <label
                 ref={uploadBtnRef}
-                aria-disabled={importing || uploadDone}
-                className={`cursor-pointer bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2
-                  ${importing || uploadDone ? "opacity-70 pointer-events-none cursor-default" : ""}`}
+                className={`relative overflow-hidden cursor-pointer text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 min-w-[148px] justify-center
+                  ${importing || uploadDone ? "pointer-events-none cursor-default" : ""}`}
+                style={{
+                  background: importing
+                    ? `linear-gradient(90deg, #059669 ${uploadProgress}%, #064e3b ${uploadProgress}%)`
+                    : uploadDone ? "#059669" : "#047857",
+                  transition: "background 0.15s",
+                }}
               >
                 {importing ? (
-                  <>
-                    <svg className="w-3.5 h-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 12a8 8 0 018-8m0 0a8 8 0 018 8" />
-                    </svg>
-                    <span ref={uploadTextRef}>Uploading...</span>
-                  </>
-                ) : uploadDone ? <span ref={uploadTextRef}>✓ Uploaded!</span> : <span ref={uploadTextRef}>↑ Upload Excel</span>}
+                  uploadProgress < 100 ? (
+                    <>
+                      <span className="font-mono font-bold tabular-nums">{uploadProgress}%</span>
+                      <span className="text-emerald-100 text-xs">
+                        {uploadProgress < 95 ? "Uploading" : "Processing..."}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 12a8 8 0 018-8m0 0a8 8 0 018 8" />
+                      </svg>
+                      Processing...
+                    </>
+                  )
+                ) : uploadDone ? "✓ Uploaded!" : "↑ Upload Excel"}
                 <input ref={fileRef} type="file" accept=".xlsx,.xls" multiple className="hidden" onChange={handleUpload} disabled={importing} />
               </label>
-              {importing && uploadingName && (
-                <p className="text-xs text-gray-400 truncate max-w-[200px]">{uploadingName}</p>
+
+              {importing && (
+                <div className="w-full min-w-[148px]">
+                  <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-1 rounded-full transition-all duration-300 ease-out"
+                      style={{
+                        width: `${uploadProgress}%`,
+                        background: uploadProgress < 95
+                          ? "linear-gradient(90deg,#10b981,#059669)"
+                          : "#f59e0b",
+                      }}
+                    />
+                  </div>
+                  {uploadingName && (
+                    <p className="text-[11px] text-gray-400 truncate mt-0.5 text-right">{uploadingName}</p>
+                  )}
+                </div>
               )}
             </div>
           </div>

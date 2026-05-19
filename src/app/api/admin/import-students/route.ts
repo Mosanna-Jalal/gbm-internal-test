@@ -60,11 +60,22 @@ const HEADER_MAP: Record<string, string> = {
  *  Returns the canonical name if found, otherwise returns the uppercased raw value. */
 function normaliseDepartment(raw: string): string {
   const upper = raw.toUpperCase().trim()
-  // Exact match
   if (ALL_DEPARTMENTS.includes(upper)) return upper
-  // Partial match (e.g. "CHEM" → "CHEMISTRY")
   const partial = ALL_DEPARTMENTS.find((d) => d.startsWith(upper) || upper.startsWith(d))
   return partial ?? upper
+}
+
+/**
+ * Parse GBMC internal roll format: GBMC/23-27/SEM I/BOT/325
+ * Extracts session (23-27 → 2023-27) and department abbreviation (BOT → BOTANY).
+ */
+function parseGBMCRoll(val: string): { session?: string; department?: string } {
+  const match = val.match(/GBMC\/(\d{2})-(\d{2})\/SEM\s+[IVX]+\/([A-Z]+)\//i)
+  if (!match) return {}
+  const [, yy1, yy2, deptAbbr] = match
+  const session = `20${yy1}-${yy2}`
+  const department = normaliseDepartment(deptAbbr)
+  return { session, department }
 }
 
 function normaliseHeader(h: string): string {
@@ -124,12 +135,12 @@ function parseBuffer(buffer: Buffer, filename: string): ParsedStudent[] {
       const mappedRollIdx = Object.entries(colMap).find(([, v]) => v === "rollNumber")?.[0]
       if (mappedRollIdx !== undefined) {
         const val = row[parseInt(mappedRollIdx)] ?? ""
-        if (/^\d{11}$/.test(val)) { rollNumber = val; rollIdx = parseInt(mappedRollIdx) }
+        if (/^\d{10,11}$/.test(val)) { rollNumber = val; rollIdx = parseInt(mappedRollIdx) }
       }
     }
     // Fallback: scan for any 11-digit number
     if (!rollNumber) {
-      rollIdx = row.findIndex((c) => /^\d{11}$/.test(c))
+      rollIdx = row.findIndex((c) => /^\d{10,11}$/.test(c))
       if (rollIdx >= 0) rollNumber = row[rollIdx]
     }
     if (!rollNumber) continue
@@ -167,6 +178,17 @@ function parseBuffer(buffer: Buffer, filename: string): ParsedStudent[] {
       const nameVal = row[rollIdx + 1] ?? ""
       if (nameVal && !/^\d/.test(nameVal) && nameVal.length >= 2) {
         record.name = nameVal
+      }
+    }
+
+    // Scan every cell for GBMC internal roll format (e.g. GBMC/23-27/SEM I/BOT/325)
+    // This gives us accurate per-student session and department, overriding filename defaults
+    for (const cell of row) {
+      if (/^GBMC\//i.test(cell)) {
+        const meta = parseGBMCRoll(cell)
+        if (meta.session) record.session = meta.session
+        if (meta.department && !record.department) record.department = meta.department
+        break
       }
     }
 
