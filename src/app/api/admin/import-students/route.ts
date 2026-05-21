@@ -100,7 +100,7 @@ interface ParsedStudent {
   extras: Record<string, string>
 }
 
-function parseBuffer(buffer: Buffer, filename: string): ParsedStudent[] {
+function parseBuffer(buffer: Buffer, filename: string): { students: ParsedStudent[]; skipped: number; skippedRows: { row: number; reason: string; preview: string }[] } {
   const wb = XLSX.read(buffer, { type: "buffer" })
   const ws = wb.Sheets[wb.SheetNames[0]]
   const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "" }) as string[][]
@@ -126,12 +126,15 @@ function parseBuffer(buffer: Buffer, filename: string): ParsedStudent[] {
   }
 
   const students: ParsedStudent[] = []
+  let skipped = 0
+  const skippedRows: { row: number; reason: string; preview: string }[] = []
   const startRow = headerRowIdx >= 0 ? headerRowIdx + 1 : 0
 
   for (let r = startRow; r < rows.length; r++) {
     const row = rows[r].map((c) => String(c).trim())
+    if (row.every((c) => !c)) continue   // blank row — silently ignore
 
-    // Find roll number: 11-digit numeric cell
+    // Find roll number: 10-11 digit numeric cell
     let rollNumber = ""
     let rollIdx = -1
 
@@ -143,12 +146,16 @@ function parseBuffer(buffer: Buffer, filename: string): ParsedStudent[] {
         if (/^\d{10,11}$/.test(val)) { rollNumber = val; rollIdx = parseInt(mappedRollIdx) }
       }
     }
-    // Fallback: scan for any 11-digit number
+    // Fallback: scan for any 10-11 digit number
     if (!rollNumber) {
       rollIdx = row.findIndex((c) => /^\d{10,11}$/.test(c))
       if (rollIdx >= 0) rollNumber = row[rollIdx]
     }
-    if (!rollNumber) continue
+    if (!rollNumber) {
+      skipped++
+      skippedRows.push({ row: r + 1, reason: "no roll number", preview: row.filter(Boolean).slice(0, 4).join(" | ") })
+      continue
+    }
 
     // Build record from all columns
     const record: ParsedStudent = {
@@ -181,7 +188,7 @@ function parseBuffer(buffer: Buffer, filename: string): ParsedStudent[] {
     } else {
       // No header: fallback — name is next non-numeric non-empty cell after roll
       const nameVal = row[rollIdx + 1] ?? ""
-      if (nameVal && !/^\d/.test(nameVal) && nameVal.length >= 2) {
+      if (nameVal && !/^\d/.test(nameVal)) {
         record.name = nameVal
       }
     }
@@ -197,13 +204,17 @@ function parseBuffer(buffer: Buffer, filename: string): ParsedStudent[] {
       }
     }
 
-    // Validate: must have a name
-    if (!record.name || record.name.length < 2) continue
+    // Validate: must have a name (any non-empty string)
+    if (!record.name) {
+      skipped++
+      skippedRows.push({ row: r + 1, reason: "no name", preview: `Roll ${rollNumber}` })
+      continue
+    }
 
     students.push(record)
   }
 
-  return students
+  return { students, skipped, skippedRows }
 }
 
 // POST — accepts uploaded files via FormData
@@ -221,12 +232,16 @@ export async function POST(req: NextRequest) {
   let imported = 0
   let updated = 0
   let departmentFilled = 0
+  let skipped = 0
+  const allSkippedRows: { file: string; row: number; reason: string; preview: string }[] = []
   const errors: string[] = []
 
   for (const file of files) {
     try {
       const buffer = Buffer.from(await file.arrayBuffer())
-      const students = parseBuffer(buffer, file.name)
+      const { students, skipped: fileSkipped, skippedRows } = parseBuffer(buffer, file.name)
+      skipped += fileSkipped
+      for (const sr of skippedRows) allSkippedRows.push({ file: file.name, ...sr })
 
       for (const s of students) {
         try {
@@ -257,7 +272,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ success: true, imported, updated, departmentFilled, errors })
+  return NextResponse.json({ success: true, imported, updated, departmentFilled, skipped, skippedRows: allSkippedRows, errors })
 }
 
 // GET — return count + list of students (with optional course/session filter)

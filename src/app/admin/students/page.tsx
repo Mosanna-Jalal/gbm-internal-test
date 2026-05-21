@@ -239,11 +239,15 @@ export default function StudentsPage() {
       const imported         = Number(data.imported         ?? 0)
       const updated          = Number(data.updated          ?? 0)
       const departmentFilled = Number(data.departmentFilled ?? 0)
+      const skipped          = Number(data.skipped          ?? 0)
+      const skippedRows      = Array.isArray(data.skippedRows) ? data.skippedRows : []
       const errors           = Array.isArray(data.errors) ? data.errors as string[] : []
+      if (skippedRows.length) console.table(skippedRows)
       const lines: string[]  = []
       if (imported > 0)         lines.push(`${imported} new student${imported !== 1 ? "s" : ""} added`)
       if (updated > 0)          lines.push(`${updated} existing student${updated !== 1 ? "s" : ""} updated`)
       if (departmentFilled > 0) lines.push(`Department filled for ${departmentFilled} student${departmentFilled !== 1 ? "s" : ""}`)
+      if (skipped > 0)          lines.push(`${skipped} row${skipped !== 1 ? "s" : ""} skipped (no roll number or name found)`)
       if (errors.length)        lines.push(`${errors.length} file${errors.length !== 1 ? "s" : ""} had errors`)
       if (lines.length === 0) {
         showToast({ type: "info", lines: ["All records are already up to date.", "No new data was found in the file."] })
