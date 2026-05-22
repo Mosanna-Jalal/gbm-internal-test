@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { getGrade, getGradeColor, semesterLabel } from "@/lib/constants"
+import { seededShuffle } from "@/lib/shuffle"
 
 interface QuestionResult {
   _id: string
@@ -260,6 +261,13 @@ function ResultPage({ params }: { params: Promise<{ attemptId: string }> }) {
                               ? `−${q.negMarks} mark${q.negMarks !== 1 ? "s" : ""} (wrong answer)`
                               : "0 marks (wrong answer)"
 
+                        // Re-apply the same per-student shuffle so options appear in the
+                        // same order the student saw during the test (avoids label confusion).
+                        const { shuffled: displayOptions, order } = seededShuffle(
+                          q.options,
+                          `${test._id}-${roll}-${q._id}`  // q._id is already a plain string from JSON
+                        )
+
                         return (
                           <div key={q._id} className="p-4">
                             {/* Question */}
@@ -272,11 +280,12 @@ function ResultPage({ params }: { params: Promise<{ attemptId: string }> }) {
                               <p className="text-sm text-gray-800 leading-snug flex-1 min-w-0">{q.text}</p>
                             </div>
 
-                            {/* Options */}
+                            {/* Options — shown in the same shuffled order as during the test */}
                             <div className="ml-0 sm:ml-9 space-y-1.5 mb-2">
-                              {q.options.map((opt, oi) => {
-                                const isChosen = chosen === oi
-                                const isRight  = q.correctIndex === oi
+                              {displayOptions.map((opt, si) => {
+                                const originalIdx = order[si]
+                                const isChosen = chosen !== null && originalIdx === chosen
+                                const isRight  = originalIdx === q.correctIndex
                                 const bg =
                                   isChosen && isRight  ? "bg-green-50 border-green-300" :
                                   isChosen && !isRight ? "bg-red-50 border-red-300" :
@@ -288,9 +297,9 @@ function ResultPage({ params }: { params: Promise<{ attemptId: string }> }) {
                                   isRight              ? "bg-green-500 text-white" :
                                                          "bg-gray-200 text-gray-500"
                                 return (
-                                  <div key={oi} className={`flex items-start gap-2 px-3 py-2 rounded-lg border text-sm ${bg}`}>
+                                  <div key={si} className={`flex items-start gap-2 px-3 py-2 rounded-lg border text-sm ${bg}`}>
                                     <span className={`w-5 h-5 rounded-full text-[11px] flex items-center justify-center font-bold shrink-0 mt-0.5 ${dotBg}`}>
-                                      {String.fromCharCode(65 + oi)}
+                                      {String.fromCharCode(65 + si)}
                                     </span>
                                     <span className={`flex-1 min-w-0 ${(isChosen || isRight) ? "font-medium text-gray-900" : "text-gray-700"}`}>
                                       <span className="block">{opt}</span>

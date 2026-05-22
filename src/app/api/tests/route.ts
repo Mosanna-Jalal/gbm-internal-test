@@ -15,17 +15,23 @@ export async function GET(req: NextRequest) {
       filter.startTime = { $lte: new Date() }
       filter.$or = [{ endTime: null }, { endTime: { $gte: new Date() } }]
     }
-  } else if (admin.subject) {
-    // Subject admin: restrict to their subject only
-    filter.subject = admin.subject
   }
 
-  for (const key of ["subject", "course", "session"]) {
+  // Apply client query params (course, session, semester)
+  for (const key of ["course", "session"]) {
     const val = searchParams.get(key)
     if (val) filter[key] = val
   }
   const sem = searchParams.get("semester")
   if (sem) filter.semester = parseInt(sem)
+
+  // Subject filter: dept admin always sees only their own subject; master/public use client param
+  if (admin?.role === "subject" && admin.subject) {
+    filter.subject = admin.subject
+  } else {
+    const subjectParam = searchParams.get("subject")
+    if (subjectParam) filter.subject = subjectParam
+  }
 
   const tests = await Test.find(filter).sort({ startTime: -1 }).limit(100)
   return NextResponse.json(tests)

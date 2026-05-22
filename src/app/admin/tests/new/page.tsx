@@ -87,11 +87,13 @@ function NewTestPage() {
   const [error, setError]   = useState("")
   const [toast, setToast]   = useState("")
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const toastRef   = useRef<HTMLDivElement>(null)
 
   function showToast(msg: string) {
     setToast(msg)
     if (toastTimer.current) clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToast(""), 5000)
+    toastTimer.current = setTimeout(() => setToast(""), 6000)
+    setTimeout(() => toastRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 50)
   }
 
   const availableCourses  = session ? VALID_COURSES_FOR_SESSION[session as Session] : COURSES
@@ -238,19 +240,6 @@ function NewTestPage() {
 
   return (
     <div className="p-4 sm:p-6 max-w-3xl mx-auto">
-      {/* Toast */}
-      {toast && (
-        <div className="fixed top-4 left-4 right-4 sm:left-auto sm:right-5 sm:top-5 z-50 sm:max-w-sm">
-          <div className="bg-[#1e3a5f] text-white rounded-2xl shadow-2xl border border-blue-400/20 p-4 flex items-start gap-3">
-            <div className="text-2xl shrink-0">⏰</div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold">Start Time Already Passed</p>
-              <p className="text-xs text-blue-200 mt-0.5 leading-relaxed">{toast}</p>
-            </div>
-            <button onClick={() => setToast("")} className="text-blue-300 hover:text-white text-xl leading-none shrink-0">×</button>
-          </div>
-        </div>
-      )}
       <div className="flex items-center gap-4 mb-6">
         <button onClick={() => router.back()} className="text-sm text-gray-500 hover:text-gray-700 shrink-0">← Back</button>
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Create Test</h1>
@@ -602,6 +591,17 @@ function NewTestPage() {
         </div>
 
         {error && <p className="text-sm text-red-600 bg-red-50 px-4 py-3 rounded-xl">{error}</p>}
+
+        {toast && (
+          <div ref={toastRef} className="flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3">
+            <span className="text-xl shrink-0">⏰</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-amber-800">Start Time Already Passed</p>
+              <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">{toast}</p>
+            </div>
+            <button onClick={() => setToast("")} className="text-amber-500 hover:text-amber-800 text-lg leading-none shrink-0">×</button>
+          </div>
+        )}
 
         <button onClick={handleCreate} disabled={saving}
           className="w-full bg-[#8b1a1a] hover:bg-[#6f1515] text-white py-3 rounded-xl font-medium transition-colors disabled:opacity-60">

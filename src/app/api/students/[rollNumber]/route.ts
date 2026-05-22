@@ -10,11 +10,11 @@ export async function GET(
   await connectDB()
   const { rollNumber } = await params
 
-  // Check admission register first — returns name + course + session
-  const student = await Student.findOne({ rollNumber }).select("name course session").lean()
+  // Check admission register first — returns name + course + session + department
+  const student = await Student.findOne({ rollNumber }).select("name course session department").lean()
   if (student) {
-    const s = student as { name: string; course: string; session: string }
-    return NextResponse.json({ name: s.name, course: s.course, session: s.session })
+    const s = student as { name: string; course: string; session: string; department?: string }
+    return NextResponse.json({ name: s.name, course: s.course, session: s.session, department: s.department ?? null })
   }
 
   // Fall back to previous attempt records (name only — course/session unknown)

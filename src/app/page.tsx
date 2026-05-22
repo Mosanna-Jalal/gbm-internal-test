@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import {
   SESSIONS, COURSES, VALID_COURSES_FOR_SESSION,
@@ -25,6 +25,7 @@ interface StudentInfo {
   name: string
   course?: string
   session?: string
+  department?: string | null
 }
 
 // ── Test card sections ──────────────────────────────────────────────────────
@@ -32,23 +33,41 @@ interface StudentInfo {
 interface TestSectionsProps {
   tests: Test[]
   studentName: string
+  now: number
   getStatus: (t: Test) => "attempted" | "active" | "upcoming" | "missed"
   onStart: (id: string) => void
   onResult: (id: string) => void
 }
 
-function TestCard({ test, status, studentName, onStart, onResult }: {
+function formatCountdown(secs: number): string {
+  if (secs >= 3600) {
+    const h = Math.floor(secs / 3600)
+    const m = Math.floor((secs % 3600) / 60)
+    return `${h}h ${m}m`
+  }
+  const m = Math.floor(secs / 60)
+  const s = secs % 60
+  return `${m}:${String(s).padStart(2, "0")}`
+}
+
+function TestCard({ test, status, studentName, now, onStart, onResult }: {
   test: Test
   status: "attempted" | "active" | "upcoming" | "missed"
   studentName: string
+  now: number
   onStart: (id: string) => void
   onResult: (id: string) => void
 }) {
+  const start = new Date(test.startTime).getTime()
+
+  const secondsToStart = status === "upcoming" ? Math.ceil((start - now) / 1000) : 0
+  const isLastMinute   = status === "upcoming" && secondsToStart <= 60
+
   return (
-    <div className={`bg-white rounded-xl border p-5 shadow-sm ${
-      status === "missed"    ? "border-red-200 opacity-80" :
-      status === "attempted" ? "border-green-200"          :
-      status === "active"    ? "border-[#8b1a1a]/30"       : "border-gray-200"
+    <div className={`bg-white rounded-xl border p-5 shadow-sm transition-colors ${
+      status === "missed"    ? "border-red-200 opacity-80"  :
+      status === "attempted" ? "border-green-200"           :
+      status === "active"    ? "border-[#8b1a1a]/30"        : "border-gray-200"
     }`}>
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
@@ -60,8 +79,9 @@ function TestCard({ test, status, studentName, onStart, onResult }: {
             <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{test.totalMarks} marks</span>
           </div>
           {status === "upcoming" && (
-            <p className="text-xs text-amber-700 mt-2 font-medium">
-              Opens {new Date(test.startTime).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+            <p className={`text-xs mt-2 font-medium ${isLastMinute ? "text-[#8b1a1a] animate-pulse" : "text-amber-700"}`}>
+              Opens in <span className="font-mono font-bold">{formatCountdown(secondsToStart)}</span>
+              {" · "}{new Date(test.startTime).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
             </p>
           )}
           {status === "active" && test.endTime && (
@@ -94,9 +114,14 @@ function TestCard({ test, status, studentName, onStart, onResult }: {
             </button>
           )}
           {status === "upcoming" && (
-            <span className="text-xs text-gray-400 border border-gray-200 px-3 py-2 rounded-lg">
-              Not open yet
-            </span>
+            <div className={`text-center border rounded-lg px-3 py-2 min-w-[72px] ${
+              isLastMinute ? "border-amber-400 bg-amber-50" : "border-gray-200"
+            }`}>
+              <p className={`text-xs font-mono font-bold ${isLastMinute ? "text-[#8b1a1a] animate-pulse" : "text-gray-500"}`}>
+                {formatCountdown(secondsToStart)}
+              </p>
+              <p className="text-[10px] text-gray-400 mt-0.5">until open</p>
+            </div>
           )}
           {status === "missed" && (
             <span className="text-xs text-red-400 border border-red-200 px-3 py-2 rounded-lg">
@@ -140,7 +165,7 @@ const SECTIONS = [
   },
 ]
 
-function TestSections({ tests, studentName, getStatus, onStart, onResult }: TestSectionsProps) {
+function TestSections({ tests, studentName, now, getStatus, onStart, onResult }: TestSectionsProps) {
   const grouped = {
     active:    tests.filter((t) => getStatus(t) === "active"),
     upcoming:  tests.filter((t) => getStatus(t) === "upcoming"),
@@ -171,6 +196,7 @@ function TestSections({ tests, studentName, getStatus, onStart, onResult }: Test
                   test={test}
                   status={key}
                   studentName={studentName}
+                  now={now}
                   onStart={onStart}
                   onResult={onResult}
                 />
@@ -201,7 +227,13 @@ export default function HomePage() {
   const [loadingTests, setLoadingTests] = useState(false)
   const [testsLoaded, setTestsLoaded]   = useState(false)
   const [notFound, setNotFound]         = useState(false)
-  const [attemptMap, setAttemptMap]     = useState<Record<string, string>>({}) // testId → attemptId
+  const [attemptMap, setAttemptMap]     = useState<Record<string, string>>({})
+  const [now, setNow]                   = useState(() => Date.now())
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
 
   const availableManualCourses = manualSession
     ? VALID_COURSES_FOR_SESSION[manualSession as Session]
@@ -274,7 +306,6 @@ export default function HomePage() {
   type TestStatus = "attempted" | "active" | "upcoming" | "missed"
   function getStatus(test: Test): TestStatus {
     if (attemptMap[test._id]) return "attempted"
-    const now = Date.now()
     const start = new Date(test.startTime).getTime()
     const end = test.endTime ? new Date(test.endTime).getTime() : null
     if (start > now) return "upcoming"
@@ -358,10 +389,13 @@ export default function HomePage() {
                   <span className="text-sm font-semibold text-green-900">{studentInfo.name}</span>
                 </div>
                 {studentInfo.course && studentInfo.session && (
-                  <div className="flex flex-wrap gap-4 text-xs text-green-700">
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-green-700">
                     <span>Course: <strong>{studentInfo.course}</strong></span>
                     <span>Session: <strong>{studentInfo.session}</strong></span>
                     {semester && <span>Semester: <strong>Sem {semesterLabel(semester)}</strong></span>}
+                    {studentInfo.department && (
+                      <span>Department: <strong>{studentInfo.department}</strong></span>
+                    )}
                   </div>
                 )}
               </div>
@@ -417,6 +451,7 @@ export default function HomePage() {
               <TestSections
                 tests={tests}
                 studentName={studentName}
+                now={now}
                 getStatus={getStatus}
                 onStart={startTest}
                 onResult={(id) => router.push(`/result/${attemptMap[id]}?roll=${encodeURIComponent(rollNumber.trim())}`)}

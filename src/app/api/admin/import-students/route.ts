@@ -287,15 +287,20 @@ export async function GET(req: NextRequest) {
   const skip  = (page - 1) * limit
 
   const filter: Record<string, string> = {}
-  const course  = searchParams.get("course")
-  const session = searchParams.get("session")
+  const course     = searchParams.get("course")
+  const session    = searchParams.get("session")
+  const department = searchParams.get("department")
   if (session) filter.session = session
 
-  if (admin.subject) {
+  if (admin.role === "subject" && admin.subject) {
+    // Dept admin — always restrict to their own course and department, ignore client params
     const adminCourse = getCourseForDepartment(admin.subject)
     if (adminCourse) filter.course = adminCourse
-  } else if (course) {
-    filter.course = course
+    filter.department = admin.subject
+  } else if (admin.role === "master") {
+    // Master admin — apply whatever the client requested
+    if (course)     filter.course     = course
+    if (department) filter.department = department
   }
 
   const [count, students] = await Promise.all([

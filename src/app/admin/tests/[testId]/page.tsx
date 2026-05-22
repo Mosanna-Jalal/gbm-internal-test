@@ -1,8 +1,18 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, Fragment } from "react"
 import { useRouter } from "next/navigation"
 import { getGrade, getGradeColor, semesterLabel } from "@/lib/constants"
+import { seededShuffle } from "@/lib/shuffle"
+
+interface Question {
+  _id: string
+  text: string
+  options: string[]
+  correctIndex: number
+  marks: number
+  negMarks: number
+}
 
 interface Test {
   _id: string
@@ -18,6 +28,7 @@ interface Test {
   isPublished: boolean
   isResultPublished: boolean
   createdBy: string
+  questions: Question[]
 }
 
 interface Attempt {
@@ -30,6 +41,7 @@ interface Attempt {
   rank: number
   timeTaken: number
   submittedAt: string
+  answers: { questionId: string; chosenIndex: number | null }[]
 }
 
 export default function TestDetailPage({ params }: { params: Promise<{ testId: string }> }) {
@@ -38,6 +50,7 @@ export default function TestDetailPage({ params }: { params: Promise<{ testId: s
   const [test, setTest] = useState<Test | null>(null)
   const [attempts, setAttempts] = useState<Attempt[]>([])
   const [loading, setLoading] = useState(true)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   function downloadCSV() {
     if (!test) return
@@ -252,27 +265,104 @@ export default function TestDetailPage({ params }: { params: Promise<{ testId: s
                     <th className="text-left px-4 py-3 font-medium text-gray-600">Grade</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-600">Time</th>
                     <th className="text-left px-4 py-3 font-medium text-gray-600">Submitted</th>
+                    <th className="px-4 py-3 font-medium text-gray-600 text-center no-print">Answers</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {attempts.map((a) => {
                     const grade = getGrade(a.percentage)
                     const gradeColor = getGradeColor(grade)
+                    const isExpanded = expandedId === a._id
                     return (
-                      <tr key={a._id} className={`hover:bg-gray-50 ${a.rank === 1 ? "bg-yellow-50" : ""}`}>
-                        <td className="px-4 py-3 font-bold text-[#1e3a5f] whitespace-nowrap">
-                          {a.rank === 1 ? "🥇" : a.rank === 2 ? "🥈" : a.rank === 3 ? "🥉" : `#${a.rank}`}
-                        </td>
-                        <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{a.studentName}</td>
-                        <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{a.rollNumber}</td>
-                        <td className="px-4 py-3 text-gray-900 whitespace-nowrap">{a.score}/{a.maxScore}</td>
-                        <td className="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">{a.percentage.toFixed(1)}%</td>
-                        <td className={`px-4 py-3 font-medium text-xs whitespace-nowrap ${gradeColor}`}>{grade}</td>
-                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{formatTime(a.timeTaken)}</td>
-                        <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
-                          {new Date(a.submittedAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}
-                        </td>
-                      </tr>
+                      <Fragment key={a._id}>
+                        <tr className={`hover:bg-gray-50 ${a.rank === 1 ? "bg-yellow-50" : ""}`}>
+                          <td className="px-4 py-3 font-bold text-[#1e3a5f] whitespace-nowrap">
+                            {a.rank === 1 ? "🥇" : a.rank === 2 ? "🥈" : a.rank === 3 ? "🥉" : `#${a.rank}`}
+                          </td>
+                          <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{a.studentName}</td>
+                          <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{a.rollNumber}</td>
+                          <td className="px-4 py-3 text-gray-900 whitespace-nowrap">{a.score}/{a.maxScore}</td>
+                          <td className="px-4 py-3 font-semibold text-gray-900 whitespace-nowrap">{a.percentage.toFixed(1)}%</td>
+                          <td className={`px-4 py-3 font-medium text-xs whitespace-nowrap ${gradeColor}`}>{grade}</td>
+                          <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{formatTime(a.timeTaken)}</td>
+                          <td className="px-4 py-3 text-gray-400 text-xs whitespace-nowrap">
+                            {new Date(a.submittedAt).toLocaleString("en-IN", { dateStyle: "short", timeStyle: "short" })}
+                          </td>
+                          <td className="px-4 py-3 text-center no-print">
+                            <button
+                              onClick={() => setExpandedId(isExpanded ? null : a._id)}
+                              className="text-xs text-[#1e3a5f] border border-[#1e3a5f]/30 px-2 py-1 rounded hover:bg-blue-50"
+                            >
+                              {isExpanded ? "▲ Hide" : "▼ View"}
+                            </button>
+                          </td>
+                        </tr>
+                        {isExpanded && test?.questions && (
+                          <tr key={`${a._id}-detail`}>
+                            <td colSpan={9} className="px-4 py-4 bg-gray-50 border-t border-b border-gray-200">
+                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                                {a.studentName} · Answer Sheet
+                              </p>
+                              <div className="space-y-3">
+                                {test.questions.map((q, qi) => {
+                                  const ans = a.answers?.find((x) => String(x.questionId) === String(q._id))
+                                  const chosen = ans?.chosenIndex ?? null
+                                  const isSkipped = chosen === null
+                                  const isCorrect = !isSkipped && chosen === q.correctIndex
+                                  // Re-shuffle to show options in the order the student saw them
+                                  const { shuffled: dispOpts, order } = seededShuffle(
+                                    q.options,
+                                    `${test._id}-${a.rollNumber}-${q._id}`
+                                  )
+                                  return (
+                                    <div key={q._id} className="bg-white rounded-lg border border-gray-200 p-3">
+                                      <div className="flex items-start gap-2 mb-2">
+                                        <span className={`shrink-0 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center ${
+                                          isSkipped ? "bg-gray-100 text-gray-400" :
+                                          isCorrect ? "bg-green-100 text-green-700" :
+                                          "bg-red-100 text-red-600"
+                                        }`}>{qi + 1}</span>
+                                        <p className="text-xs text-gray-800 flex-1 leading-snug">{q.text}</p>
+                                        <span className={`text-xs font-semibold shrink-0 ${
+                                          isSkipped ? "text-gray-400" :
+                                          isCorrect ? "text-green-600" : "text-red-500"
+                                        }`}>
+                                          {isSkipped ? "–" : isCorrect ? `+${q.marks}` : q.negMarks > 0 ? `−${q.negMarks}` : "0"}
+                                        </span>
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-1 ml-7">
+                                        {dispOpts.map((opt, si) => {
+                                          const origIdx = order[si]
+                                          const isCh = !isSkipped && origIdx === chosen
+                                          const isRt = origIdx === q.correctIndex
+                                          return (
+                                            <div key={si} className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs border ${
+                                              isCh && isRt  ? "bg-green-50 border-green-300 font-medium" :
+                                              isCh && !isRt ? "bg-red-50 border-red-300 font-medium" :
+                                              isRt          ? "bg-green-50 border-green-200" :
+                                              "bg-gray-50 border-transparent text-gray-500"
+                                            }`}>
+                                              <span className={`w-4 h-4 rounded-full text-[9px] flex items-center justify-center font-bold shrink-0 ${
+                                                isCh && isRt  ? "bg-green-600 text-white" :
+                                                isCh && !isRt ? "bg-red-500 text-white" :
+                                                isRt          ? "bg-green-500 text-white" :
+                                                "bg-gray-200 text-gray-500"
+                                              }`}>{String.fromCharCode(65 + si)}</span>
+                                              <span className="truncate">{opt}</span>
+                                              {isCh && <span className="ml-auto shrink-0">{isRt ? "✓" : "✗"}</span>}
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                      {isSkipped && <p className="text-[10px] text-gray-400 ml-7 mt-1">Not attempted</p>}
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     )
                   })}
                 </tbody>

@@ -13,8 +13,12 @@ export async function GET(
   const test = await Test.findById(id)
   if (!test) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
+  const roll = req.nextUrl.searchParams.get("roll")
   const admin = await getAdminFromCookie()
-  if (admin) return NextResponse.json(test)
+
+  // Admin without roll param → full unshuffled doc (for admin panel)
+  // If roll is present → always serve shuffled student view, even for admins
+  if (admin && !roll) return NextResponse.json(test)
 
   // Student: enforce visibility rules
   if (!test.isPublished)
@@ -25,22 +29,23 @@ export async function GET(
   if (test.endTime && test.endTime < now)
     return NextResponse.json({ error: "Test has ended" }, { status: 403 })
 
-  const roll = req.nextUrl.searchParams.get("roll") ?? "anon"
+  const effectiveRoll = roll ?? "anon"
 
   // Shuffle questions
   const { shuffled: shuffledQuestions } = seededShuffle(
     test.questions as IEmbeddedQuestion[],
-    `${id}-${roll}`
+    `${id}-${effectiveRoll}`
   )
 
   // Shuffle options, strip correct answer
   const questions = shuffledQuestions.map((q: IEmbeddedQuestion) => {
-    const { shuffled: shuffledOptions } = seededShuffle(q.options, `${id}-${roll}-${q._id}`)
-    return { _id: q._id, text: q.text, options: shuffledOptions, marks: q.marks }
+    const qid = q._id.toHexString()
+    const { shuffled: shuffledOptions } = seededShuffle(q.options, `${id}-${effectiveRoll}-${qid}`)
+    return { _id: qid, text: q.text, options: shuffledOptions, marks: q.marks }
   })
 
   return NextResponse.json({
-    _id: test._id,
+    _id: id,
     title: test.title,
     subject: test.subject,
     course: test.course,

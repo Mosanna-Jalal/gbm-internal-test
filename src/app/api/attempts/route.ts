@@ -64,7 +64,8 @@ export async function POST(req: NextRequest) {
       let originalIndex: number | null = null
 
       if (chosenShuffledIndex !== null && chosenShuffledIndex !== undefined) {
-        const { order } = seededShuffle(question.options, `${testId}-${rollNumber}-${questionId}`)
+        const qid = question._id.toHexString()
+        const { order } = seededShuffle(question.options, `${testId}-${rollNumber}-${qid}`)
         originalIndex = order[chosenShuffledIndex]
 
         if (originalIndex === question.correctIndex) {
@@ -80,25 +81,36 @@ export async function POST(req: NextRequest) {
 
   const percentage = maxScore > 0 ? (score / maxScore) * 100 : 0
 
-  const attempt = await StudentAttempt.create({
-    testId, studentName, rollNumber, course, session, semester,
-    answers: scoredAnswers,
-    submittedAt: new Date(),
-    timeTaken: timeTaken ?? 0,
-    score, maxScore, percentage, rank: 0,
-  })
+  let attempt
+  try {
+    attempt = await StudentAttempt.create({
+      testId, studentName, rollNumber, course, session, semester,
+      answers: scoredAnswers,
+      submittedAt: new Date(),
+      timeTaken: timeTaken ?? 0,
+      score, maxScore, percentage, rank: 0,
+    })
+  } catch (err) {
+    // Unique index violation — concurrent duplicate submission
+    if ((err as { code?: number }).code === 11000) {
+      const dup = await StudentAttempt.findOne({ testId, rollNumber })
+      return NextResponse.json({ error: "Already attempted", attemptId: dup?._id }, { status: 409 })
+    }
+    throw err
+  }
 
-  // Recompute ranks for all attempts in this test
+  // Recompute ranks sequentially so concurrent submissions don't interleave writes
   const allAttempts = await StudentAttempt.find({ testId }).sort({ score: -1, timeTaken: 1 })
   let currentRank = 1
-  await Promise.all(allAttempts.map((a, i) => {
+  let myRank = 1
+  for (let i = 0; i < allAttempts.length; i++) {
     if (i > 0 && (
       allAttempts[i].score !== allAttempts[i - 1].score ||
       allAttempts[i].timeTaken !== allAttempts[i - 1].timeTaken
     )) currentRank = i + 1
-    return StudentAttempt.findByIdAndUpdate(a._id, { rank: currentRank })
-  }))
+    await StudentAttempt.findByIdAndUpdate(allAttempts[i]._id, { rank: currentRank })
+    if (String(allAttempts[i]._id) === String(attempt._id)) myRank = currentRank
+  }
 
-  const updated = await StudentAttempt.findById(attempt._id)
-  return NextResponse.json({ success: true, attemptId: attempt._id, score, maxScore, percentage, rank: updated?.rank ?? 1 })
+  return NextResponse.json({ success: true, attemptId: attempt._id, score, maxScore, percentage, rank: myRank })
 }

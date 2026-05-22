@@ -49,12 +49,12 @@ interface AdminInfo {
 
 export default function StudentsPage() {
   const router        = useRouter()
-  const fileRef       = useRef<HTMLInputElement>(null)
-  const uploadBtnRef  = useRef<HTMLLabelElement>(null)
-  const uploadTextRef = useRef<HTMLSpanElement>(null)
+  const fileRef      = useRef<HTMLInputElement>(null)
+  const terminalRef  = useRef<HTMLDivElement>(null)
 
   const [adminInfo, setAdminInfo]         = useState<AdminInfo | null>(null)
-  const [lockedCourse, setLockedCourse]   = useState<Course | "">("")
+  const [lockedCourse,      setLockedCourse]      = useState<Course | "">("")
+  const [lockedDepartment,  setLockedDepartment]  = useState("")
 
   const [filterSession,    setFilterSession]    = useState<Session | "">("")
   const [filterCourse,     setFilterCourse]     = useState<Course | "">("")
@@ -76,6 +76,7 @@ export default function StudentsPage() {
   const [uploadingName,  setUploadingName]  = useState("")
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadDone,     setUploadDone]     = useState(false)
+  const [terminalLines,  setTerminalLines]  = useState<{ text: string; type: "cmd" | "ok" | "err" }[]>([])
   const [toast,          setToast]          = useState<ImportToast | null>(null)
   const toastTimer  = useRef<ReturnType<typeof setTimeout> | null>(null)
   const doneTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -106,15 +107,20 @@ export default function StudentsPage() {
       setAdminInfo(d)
       if (d.subject) {
         const course = getCourseForDepartment(d.subject) as Course | null
-        if (course) {
-          setLockedCourse(course)
-          setFilterCourse(course)
-        }
+        if (course) { setLockedCourse(course); setFilterCourse(course) }
+        setLockedDepartment(d.subject)
+        setFilterDepartment(d.subject)
+        // Explicit refetch with dept filter so subject admins never see other departments,
+        // even if the backend cookie check fails (stale JWT, edge cache, etc.)
+        fetchStudents({ course: course || "", dept: d.subject })
+        fetch(`/api/admin/import-students?department=${encodeURIComponent(d.subject)}`)
+          .then((r) => r.ok ? r.json() : null)
+          .then((data) => { if (data?.count != null) setAllCount(data.count) })
       }
     })
     fetch("/api/admin/import-students")
-      .then((r) => r.json())
-      .then((d) => setAllCount(d.count ?? 0))
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d) setAllCount(d.count ?? 0) })
     fetchStudents()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -141,46 +147,47 @@ export default function StudentsPage() {
     } catch {}
   }, [filterSession, filterCourse, filterSemester, autoSemester, adminInfo])
 
-  async function fetchStudents(p = 1, course = filterCourse, session = filterSession) {
+  useEffect(() => {
+    if (terminalRef.current) terminalRef.current.scrollTop = terminalRef.current.scrollHeight
+  }, [terminalLines])
+
+  async function fetchStudents({ p = 1, course = filterCourse, session = filterSession, dept = filterDepartment }: { p?: number; course?: string; session?: string; dept?: string } = {}) {
     setLoading(true)
-    const params = new URLSearchParams({ page: String(p) })
-    if (course)  params.set("course", course)
-    if (session) params.set("session", session)
-    const res  = await fetch(`/api/admin/import-students?${params}`)
-    const data = await res.json()
-    setStudents(data.students ?? [])
-    setTotalCount(data.count ?? 0)
-    setPages(data.pages ?? 1)
-    setPage(p)
-    setLoading(false)
+    try {
+      const params = new URLSearchParams({ page: String(p) })
+      if (course)  params.set("course", course)
+      if (session) params.set("session", session)
+      if (dept)    params.set("department", dept)
+      const res  = await fetch(`/api/admin/import-students?${params}`)
+      if (!res.ok) return
+      const data = await res.json()
+      setStudents(data.students ?? [])
+      setTotalCount(data.count ?? 0)
+      setPages(data.pages ?? 1)
+      setPage(p)
+    } catch {
+      // Network error or empty response — leave existing list intact
+    } finally {
+      setLoading(false)
+    }
   }
 
   function clearFilter() {
     setFilterSession("")
-    if (!lockedCourse) { setFilterCourse(""); setFilterDepartment("") }
+    if (!lockedCourse)     setFilterCourse("")
+    if (!lockedDepartment) setFilterDepartment("")
     setFilterSemester("")
-    fetchStudents(1, lockedCourse || "", "")
+    fetchStudents({ course: lockedCourse || "", session: "", dept: lockedDepartment || "" })
   }
 
   function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files
     if (!files?.length) return
-    // Direct DOM update — instant, no React cycle needed
-    if (uploadBtnRef.current) {
-      uploadBtnRef.current.style.opacity = "0.65"
-      uploadBtnRef.current.style.pointerEvents = "none"
-      uploadBtnRef.current.style.cursor = "default"
-      uploadBtnRef.current.setAttribute("aria-disabled", "true")
-      uploadBtnRef.current.setAttribute("data-uploading", "true")
-    }
-    if (uploadTextRef.current) {
-      uploadTextRef.current.textContent = "Uploading..."
-    }
-    // flushSync keeps React state in sync with the DOM update above
     flushSync(() => {
       setImporting(true)
       setUploadDone(false)
       setUploadingName(files.length === 1 ? files[0].name : `${files.length} files`)
+      setTerminalLines([])
     })
     requestAnimationFrame(() => doUpload(Array.from(files)))
   }
@@ -188,33 +195,66 @@ export default function StudentsPage() {
   async function doUpload(files: File[]) {
     const form = new FormData()
     for (const file of files) form.append("files", file)
+
+    const log = (text: string, type: "cmd" | "ok" | "err" = "cmd") =>
+      setTerminalLines((prev) => [...prev, { text, type }])
+
+    log(`Initializing upload...`)
+    log(`Reading: ${files.length === 1 ? files[0].name : `${files.length} files`}`)
+
+    const processingLogs = [
+      "Parsing Excel workbook...",
+      "Detecting header row...",
+      "Mapping column fields...",
+      "Validating student records...",
+      "Checking for duplicates...",
+      "Resolving departments...",
+      "Writing to database...",
+      "Finalizing import...",
+    ]
+
     try {
-      // XHR provides real upload progress; fetch does not
-      // Phase 1 (0-70%): real XHR upload transfer progress
-      // Phase 2 (70-95%): slow animation while server processes
-      // Phase 3 (100%): server responded
       const data = await new Promise<Record<string, unknown>>((resolve, reject) => {
         const xhr = new XMLHttpRequest()
         let processingInterval: ReturnType<typeof setInterval> | null = null
+        let xferLogged = false
+        let logIndex = 0
 
         xhr.upload.addEventListener("progress", (e) => {
           if (e.lengthComputable) {
-            const pct = Math.round((e.loaded / e.total) * 70)
-            setUploadProgress(pct)
+            setUploadProgress(Math.round((e.loaded / e.total) * 70))
+            if (!xferLogged) { xferLogged = true; log("Transferring to server...") }
           }
         })
 
         xhr.upload.addEventListener("load", () => {
-          // Upload transfer done — now waiting for server; animate slowly 70→95
+          if (!xferLogged) log("Transferring to server...")
+          log("File received. Starting server-side processing...")
           let current = 70
+          let waitTick = 0
+          let waitIndex = 0
+          const waitingLogs = [
+            "Verifying data integrity...",
+            "Cross-checking session tags...",
+            "Syncing department metadata...",
+            "Confirming write operations...",
+            "Building response payload...",
+            "Awaiting server confirmation...",
+          ]
           setUploadProgress(current)
           processingInterval = setInterval(() => {
-            current = Math.min(95, current + 1)
-            setUploadProgress(current)
-            if (current >= 95 && processingInterval) {
-              clearInterval(processingInterval)
-              processingInterval = null
+            if (current < 95) {
+              current++
+              setUploadProgress(current)
+              if ((current - 70) % 3 === 1 && logIndex < processingLogs.length)
+                log(processingLogs[logIndex++])
+            } else {
+              // Stuck at 95 waiting for server — keep terminal alive
+              waitTick++
+              if (waitTick % 8 === 0 && waitIndex < waitingLogs.length)
+                log(waitingLogs[waitIndex++])
             }
+            // Never self-clear — xhr.load / xhr.error clears this
           }, 300)
         })
 
@@ -233,6 +273,7 @@ export default function StudentsPage() {
       })
 
       if (!data.success) {
+        log(String(data.error ?? "Import failed"), "err")
         showToast({ type: "error", lines: [String(data.error ?? "Import failed")] })
         return
       }
@@ -243,30 +284,37 @@ export default function StudentsPage() {
       const skippedRows      = Array.isArray(data.skippedRows) ? data.skippedRows : []
       const errors           = Array.isArray(data.errors) ? data.errors as string[] : []
       if (skippedRows.length) console.table(skippedRows)
-      const lines: string[]  = []
-      if (imported > 0)         lines.push(`${imported} new student${imported !== 1 ? "s" : ""} added`)
-      if (updated > 0)          lines.push(`${updated} existing student${updated !== 1 ? "s" : ""} updated`)
-      if (departmentFilled > 0) lines.push(`Department filled for ${departmentFilled} student${departmentFilled !== 1 ? "s" : ""}`)
-      if (skipped > 0)          lines.push(`${skipped} row${skipped !== 1 ? "s" : ""} skipped (no roll number or name found)`)
-      if (errors.length)        lines.push(`${errors.length} file${errors.length !== 1 ? "s" : ""} had errors`)
-      if (lines.length === 0) {
+
+      if (imported > 0)         log(`${imported} new student${imported !== 1 ? "s" : ""} added`, "ok")
+      if (updated > 0)          log(`${updated} record${updated !== 1 ? "s" : ""} updated`, "ok")
+      if (departmentFilled > 0) log(`Department filled for ${departmentFilled}`, "ok")
+      if (skipped > 0)          log(`${skipped} row${skipped !== 1 ? "s" : ""} skipped`)
+      if (errors.length)        log(`${errors.length} file error${errors.length !== 1 ? "s" : ""}`, "err")
+      log("Done.", "ok")
+
+      const toastLines: string[] = []
+      if (imported > 0)         toastLines.push(`${imported} new student${imported !== 1 ? "s" : ""} added`)
+      if (updated > 0)          toastLines.push(`${updated} existing student${updated !== 1 ? "s" : ""} updated`)
+      if (departmentFilled > 0) toastLines.push(`Department filled for ${departmentFilled} student${departmentFilled !== 1 ? "s" : ""}`)
+      if (skipped > 0)          toastLines.push(`${skipped} row${skipped !== 1 ? "s" : ""} skipped (no roll number or name found)`)
+      if (errors.length)        toastLines.push(`${errors.length} file${errors.length !== 1 ? "s" : ""} had errors`)
+
+      await new Promise((r) => setTimeout(r, 800))
+      if (toastLines.length === 0) {
         showToast({ type: "info", lines: ["All records are already up to date.", "No new data was found in the file."] })
       } else {
-        showToast({ type: "success", lines })
+        showToast({ type: "success", lines: toastLines })
       }
       setUploadDone(true)
       if (doneTimer.current) clearTimeout(doneTimer.current)
       doneTimer.current = setTimeout(() => setUploadDone(false), 4000)
-      fetchStudents(1, filterCourse, filterSession)
+      fetchStudents()
       fetch("/api/admin/import-students").then((r) => r.json()).then((d) => setAllCount(d.count ?? 0))
     } catch {
+      log("Upload failed. Please try again.", "err")
+      await new Promise((r) => setTimeout(r, 800))
       showToast({ type: "error", lines: ["Upload failed. Please try again."] })
     } finally {
-      if (uploadBtnRef.current) {
-        uploadBtnRef.current.style.opacity = ""
-        uploadBtnRef.current.style.pointerEvents = ""
-        uploadBtnRef.current.style.cursor = ""
-      }
       setImporting(false)
       setUploadProgress(0)
       setUploadingName("")
@@ -348,6 +396,79 @@ export default function StudentsPage() {
         document.body
       )}
 
+      {/* Upload modal — full-screen overlay with terminal */}
+      {importing && typeof document !== "undefined" && createPortal(
+        <>
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-[2px] z-[9990]" />
+          <div className="fixed inset-0 z-[9991] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+
+              {/* Modal header */}
+              <div className="bg-gradient-to-r from-[#1e3a5f] to-[#2a4f82] px-6 py-4 flex items-center gap-3">
+                <svg className="w-5 h-5 text-white animate-spin shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 12a8 8 0 018-8m0 0a8 8 0 018 8" />
+                </svg>
+                <div className="min-w-0">
+                  <p className="text-white font-semibold text-sm">Importing Students</p>
+                  <p className="text-blue-200 text-xs mt-0.5 truncate">{uploadingName}</p>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="px-6 pt-4 pb-2">
+                <div className="flex justify-between text-xs mb-1.5">
+                  <span className="text-gray-500">
+                    {uploadProgress < 70 ? "Uploading file..." : uploadProgress < 100 ? "Processing on server..." : "Complete"}
+                  </span>
+                  <span className="font-mono font-bold text-[#1e3a5f]">{uploadProgress}%</span>
+                </div>
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-300 ease-out"
+                    style={{
+                      width: `${uploadProgress}%`,
+                      background: uploadProgress < 70
+                        ? "linear-gradient(90deg,#3b82f6,#1e3a5f)"
+                        : "linear-gradient(90deg,#10b981,#047857)",
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Terminal screen */}
+              <div className="mx-6 mb-6 mt-3 rounded-xl overflow-hidden border border-gray-800">
+                <div className="flex items-center gap-1.5 px-3 py-2 bg-[#1c1c1e] border-b border-gray-800">
+                  <span className="w-3 h-3 rounded-full bg-[#ff5f57]" />
+                  <span className="w-3 h-3 rounded-full bg-[#febc2e]" />
+                  <span className="w-3 h-3 rounded-full bg-[#28c840]" />
+                  <span className="text-gray-500 text-[11px] ml-2 font-mono">import.process</span>
+                </div>
+                <div ref={terminalRef} className="bg-gray-950 p-4 h-44 overflow-y-auto font-mono text-[11px] leading-5 space-y-0.5">
+                  {terminalLines.map((line, i) => (
+                    <div key={i} className="flex items-start gap-1.5">
+                      <span className={`shrink-0 ${line.type === "ok" ? "text-green-400" : line.type === "err" ? "text-red-400" : "text-blue-400"}`}>
+                        {line.type === "ok" ? "✓" : line.type === "err" ? "✗" : "$"}
+                      </span>
+                      <span className={line.type === "ok" ? "text-green-300" : line.type === "err" ? "text-red-300" : "text-gray-300"}>
+                        {line.text}
+                      </span>
+                    </div>
+                  ))}
+                  {uploadProgress < 100 && (
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-blue-400">$</span>
+                      <span className="text-gray-600 animate-pulse">█</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <div>
@@ -361,57 +482,15 @@ export default function StudentsPage() {
                 Clear All
               </button>
             )}
-            <div className="flex flex-col items-end gap-1.5">
-              <label
-                ref={uploadBtnRef}
-                className={`relative overflow-hidden cursor-pointer text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 min-w-[148px] justify-center
-                  ${importing || uploadDone ? "pointer-events-none cursor-default" : ""}`}
-                style={{
-                  background: importing
-                    ? `linear-gradient(90deg, #059669 ${uploadProgress}%, #064e3b ${uploadProgress}%)`
-                    : uploadDone ? "#059669" : "#047857",
-                  transition: "background 0.15s",
-                }}
-              >
-                {importing ? (
-                  uploadProgress < 100 ? (
-                    <>
-                      <span className="font-mono font-bold tabular-nums">{uploadProgress}%</span>
-                      <span className="text-emerald-100 text-xs">
-                        {uploadProgress < 95 ? "Uploading" : "Processing..."}
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-3.5 h-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 12a8 8 0 018-8m0 0a8 8 0 018 8" />
-                      </svg>
-                      Processing...
-                    </>
-                  )
-                ) : uploadDone ? "✓ Uploaded!" : "↑ Upload Excel"}
-                <input ref={fileRef} type="file" accept=".xlsx,.xls" multiple className="hidden" onChange={handleUpload} disabled={importing} />
-              </label>
-
-              {importing && (
-                <div className="w-full min-w-[148px]">
-                  <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-1 rounded-full transition-all duration-300 ease-out"
-                      style={{
-                        width: `${uploadProgress}%`,
-                        background: uploadProgress < 95
-                          ? "linear-gradient(90deg,#10b981,#059669)"
-                          : "#f59e0b",
-                      }}
-                    />
-                  </div>
-                  {uploadingName && (
-                    <p className="text-[11px] text-gray-400 truncate mt-0.5 text-right">{uploadingName}</p>
-                  )}
-                </div>
-              )}
-            </div>
+            <label
+              className={`cursor-pointer text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 min-w-[148px] justify-center transition-colors
+                ${importing ? "bg-emerald-700 pointer-events-none opacity-80" : uploadDone ? "bg-emerald-600 pointer-events-none" : "bg-emerald-700 hover:bg-emerald-800"}`}
+            >
+              {importing
+                ? <><svg className="w-3.5 h-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 12a8 8 0 018-8m0 0a8 8 0 018 8" /></svg>Uploading...</>
+                : uploadDone ? "✓ Uploaded!" : "↑ Upload Excel"}
+              <input ref={fileRef} type="file" accept=".xlsx,.xls" multiple className="hidden" onChange={handleUpload} disabled={importing} />
+            </label>
           </div>
         )}
       </div>
@@ -437,7 +516,7 @@ export default function StudentsPage() {
                 const val = e.target.value as Session
                 setFilterSession(val)
                 setFilterSemester("")
-                fetchStudents(1, filterCourse, val)
+                fetchStudents({ session: val })
               }}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
             >
@@ -464,7 +543,7 @@ export default function StudentsPage() {
                     if (deptCourse !== val) setFilterDepartment("")
                   }
                   if (!val) setFilterDepartment("")
-                  fetchStudents(1, val, filterSession)
+                  fetchStudents({ course: val })
                 }}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
               >
@@ -474,10 +553,14 @@ export default function StudentsPage() {
             )}
           </div>
 
-          {/* Department — master admin only */}
-          {!lockedCourse && (
-            <div className="col-span-2 sm:col-span-1">
-              <label className="block text-xs text-gray-500 mb-1">Department</label>
+          {/* Department */}
+          <div className="col-span-2 sm:col-span-1">
+            <label className="block text-xs text-gray-500 mb-1">Department</label>
+            {lockedDepartment ? (
+              <div className="border border-blue-200 bg-blue-50 rounded-lg px-3 py-2 text-sm font-semibold text-blue-900">
+                {lockedDepartment}
+              </div>
+            ) : (
               <select
                 value={filterDepartment}
                 onChange={(e) => {
@@ -487,10 +570,12 @@ export default function StudentsPage() {
                     const course = getCourseForDepartment(dept) as Course | null
                     if (course) {
                       setFilterCourse(course)
-                      fetchStudents(1, course, filterSession)
+                      fetchStudents({ course, dept })
+                    } else {
+                      fetchStudents({ dept })
                     }
                   } else {
-                    fetchStudents(1, filterCourse, filterSession)
+                    fetchStudents({ dept: "" })
                   }
                 }}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1e3a5f]"
@@ -500,8 +585,8 @@ export default function StudentsPage() {
                   <option key={d} value={d}>{d}</option>
                 ))}
               </select>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Semester */}
           {filterSession && (
@@ -529,12 +614,28 @@ export default function StudentsPage() {
           )}
         </div>
 
+        {/* Filter result count */}
+        {isFiltered && !loading && (
+          <div className="pt-3 border-t border-gray-100 flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 bg-[#1e3a5f]/8 text-[#1e3a5f] text-sm font-medium px-3 py-1.5 rounded-lg">
+              <span className="font-bold tabular-nums">{totalCount}</span>
+              <span className="font-normal">student{totalCount !== 1 ? "s" : ""} found</span>
+            </span>
+            {filterDepartment && (
+              <span className="text-xs text-gray-400">in {filterDepartment}{filterCourse ? ` · ${filterCourse}` : ""}{filterSession ? ` · ${filterSession}` : ""}</span>
+            )}
+          </div>
+        )}
+
         {/* Create Test CTA */}
         {filterSession && filterCourse && (
           <div className="pt-3 border-t border-gray-100 space-y-2">
             <div>
               <p className="text-sm text-gray-700">
                 <strong>{filterCourse} — {filterSession}</strong>
+                {filterDepartment && (
+                  <span className="ml-2 bg-purple-100 text-purple-700 text-xs font-semibold px-2 py-0.5 rounded">{filterDepartment}</span>
+                )}
                 {selectedSem ? (
                   <>
                     {" · "}
@@ -546,7 +647,7 @@ export default function StudentsPage() {
                 )}
               </p>
               <p className="text-sm text-gray-500 mt-0.5">
-                {totalCount} student{totalCount !== 1 ? "s" : ""} in this batch
+                <span className="font-semibold text-gray-700">{totalCount}</span> student{totalCount !== 1 ? "s" : ""} in this batch
               </p>
             </div>
             {selectedSem && (
@@ -554,7 +655,7 @@ export default function StudentsPage() {
                 onClick={handleCreateTest}
                 className="w-full sm:w-auto bg-[#8b1a1a] hover:bg-[#6f1515] text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
               >
-                + Create Test · {filterCourse} Sem {semesterLabel(selectedSem)}
+                + Create Test · {filterCourse} Sem {semesterLabel(selectedSem)}{filterDepartment ? ` · ${filterDepartment}` : ""}
               </button>
             )}
           </div>
@@ -695,10 +796,10 @@ export default function StudentsPage() {
 
           {pages > 1 && (
             <div className="flex items-center justify-center gap-2 mt-4">
-              <button onClick={() => fetchStudents(page - 1)} disabled={page === 1}
+              <button onClick={() => fetchStudents({ p: page - 1 })} disabled={page === 1}
                 className="px-3 py-1.5 border rounded-lg text-sm disabled:opacity-40 hover:bg-gray-50">← Prev</button>
               <span className="text-sm text-gray-500">Page {page} of {pages}</span>
-              <button onClick={() => fetchStudents(page + 1)} disabled={page === pages}
+              <button onClick={() => fetchStudents({ p: page + 1 })} disabled={page === pages}
                 className="px-3 py-1.5 border rounded-lg text-sm disabled:opacity-40 hover:bg-gray-50">Next →</button>
             </div>
           )}

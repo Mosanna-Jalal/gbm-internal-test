@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
   const dept = req.nextUrl.searchParams.get("department")
   const filter: Record<string, string> = {}
 
-  if (admin.subject) {
+  if (admin.role === "subject" && admin.subject) {
     filter.department = admin.subject
   } else if (dept) {
     filter.department = dept
