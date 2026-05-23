@@ -20,8 +20,11 @@ const QUICK_TIMES = [
   { label: "4:00 PM",  value: "16:00" },
 ]
 
-function todayStr()    { return new Date().toISOString().split("T")[0] }
-function tomorrowStr() { const d = new Date(); d.setDate(d.getDate() + 1); return d.toISOString().split("T")[0] }
+function localDateStr(d = new Date()) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+function todayStr()    { return localDateStr() }
+function tomorrowStr() { const d = new Date(); d.setDate(d.getDate() + 1); return localDateStr(d) }
 function nowTimeStr()  { const n = new Date(); return `${String(n.getHours()).padStart(2,"0")}:${String(n.getMinutes()).padStart(2,"0")}` }
 function addMinutes(timeStr: string, mins: number): string {
   if (!timeStr) return ""
