@@ -89,8 +89,9 @@ function NewTestPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState("")
   const [toast, setToast]   = useState("")
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const toastRef   = useRef<HTMLDivElement>(null)
+  const toastTimer        = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const toastRef          = useRef<HTMLDivElement>(null)
+  const pendingDraftPaper = useRef("")
 
   function showToast(msg: string) {
     setToast(msg)
@@ -104,10 +105,10 @@ function NewTestPage() {
   const maxSem            = session ? SESSION_SEMS[session as Session] : 8
   const totalMarks        = questions.reduce((s, q) => s + parseFloat(q.marks || "0"), 0)
 
-  // Save draft to sessionStorage on every change
+  // Save draft to localStorage on every change
   useEffect(() => {
     try {
-      sessionStorage.setItem("gbm_test_draft", JSON.stringify({
+      localStorage.setItem("gbm_test_draft", JSON.stringify({
         title, teacherName, session, course, semester, subject, paper,
         duration, startDate, startTimeStr, endDate, endTimeStr, questions, locked,
       }))
@@ -125,7 +126,7 @@ function NewTestPage() {
       }
       // Restore draft (non-locked fields only)
       try {
-        const raw = sessionStorage.getItem("gbm_test_draft")
+        const raw = localStorage.getItem("gbm_test_draft")
         if (!raw) return
         const draft = JSON.parse(raw)
         if (draft.title)       setTitle(draft.title)
@@ -136,6 +137,9 @@ function NewTestPage() {
         if (draft.endDate)     setEndDate(draft.endDate)
         if (draft.endTimeStr)  setEndTimeStr(draft.endTimeStr)
         if (draft.questions?.length) setQuestions(draft.questions)
+        // Store draft paper in ref — the subject useEffect will restore it
+        // after fetching the papers list (direct setPaper would be overwritten)
+        if (draft.paper) pendingDraftPaper.current = draft.paper
         if (!d?.subject) {
           // Only restore batch/dept for master admin
           if (draft.session)  setSession(draft.session)
@@ -144,7 +148,6 @@ function NewTestPage() {
           if (draft.subject)  setSubject(draft.subject)
           if (draft.locked)   setLocked(draft.locked)
         }
-        if (draft.paper) setPaper(draft.paper)
       } catch {}
     })
 
@@ -163,16 +166,39 @@ function NewTestPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  function fetchPapers(dept: string, keepPaper?: string) {
+    fetch(`/api/papers?department=${encodeURIComponent(dept)}`)
+      .then((r) => r.ok ? r.json() : [])
+      .then((list: { _id: string; name: string }[]) => {
+        setPapers(list)
+        const target = keepPaper ?? pendingDraftPaper.current
+        pendingDraftPaper.current = ""
+        if (target && list.some((p) => p._id === target)) {
+          setPaper(target)
+        } else if (!keepPaper) {
+          // subject changed by user — clear paper unless restoring draft
+          setPaper((prev) => list.some((p) => p._id === prev) ? prev : "")
+        }
+      })
+  }
+
   useEffect(() => {
-    if (subject) {
-      fetch(`/api/papers?department=${encodeURIComponent(subject)}`)
-        .then((r) => r.ok ? r.json() : []).then(setPapers)
-      setPaper("")
-    } else {
-      setPapers([])
-    }
+    if (subject) fetchPapers(subject)
+    else { setPapers([]); setPaper("") }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subject])
+
+  // Re-fetch papers when user returns to this tab (e.g. after adding a paper)
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState === "visible" && subject) {
+        fetchPapers(subject, paper || undefined)
+      }
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => document.removeEventListener("visibilitychange", onVisible)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subject, paper])
 
   function handleSessionChange(val: Session | "") {
     setSession(val)
@@ -235,7 +261,7 @@ function NewTestPage() {
       }
       const res = await fetch("/api/tests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
       if (!res.ok) { const d = await res.json(); setError(d.error ?? "Failed to create test"); return }
-      try { sessionStorage.removeItem("gbm_test_draft") } catch {}
+      try { localStorage.removeItem("gbm_test_draft") } catch {}
       router.push("/admin/tests")
     } catch { setError("Network error") }
     finally { setSaving(false) }
